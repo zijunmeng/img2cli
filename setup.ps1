@@ -162,4 +162,4 @@ Write-Host "Created background runner script: $vbsFile in the current directory!
 Write-Host "`n=== Setup Complete! ===" -ForegroundColor Green
 Write-Host "1. To run img2cli in the background, double click the following file in this folder:" -ForegroundColor Cyan
 Write-Host "   $vbsFile" -ForegroundColor Yellow
-Write-Host "2. Copy a screenshot, select your SSH terminal, and press Ctrl+Shift+V." -ForegroundColor Cyan
+Write-Host "2. Copy a screenshot, select your SSH terminal, and paste the path (Ctrl+V, Shift+Insert, or Right-Click)." -ForegroundColor Cyan

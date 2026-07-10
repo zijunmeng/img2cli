@@ -4,13 +4,14 @@ A fast, lightweight, and cross-platform command-line utility written in Rust tha
 
 ## How it Works
 
-When the tool is running in the background, copying an image (e.g., via standard screenshot tools) and pressing the configured global hotkey (default: `Ctrl+Shift+V`) will trigger `img2cli` to:
+When the tool is running in the background, copying an image (e.g., via standard screenshot tools) will automatically trigger `img2cli` to:
 1. Retrieve the screenshot image from the system clipboard.
 2. Compress and optimize the image (e.g. resizing and converting to JPEG) to save network transmission time and API token costs.
 3. Save the image locally.
 4. If configured, automatically upload the image to your remote Linux server via `scp`.
 5. Format the output path (e.g., as an absolute path, Markdown image link, or HTML tag).
-6. Simulate keyboard typing to paste the formatted output into your active terminal.
+6. Update your clipboard with the formatted remote path text, and send a notification.
+7. You simply press paste (Ctrl+V, Shift+Insert, or Right-Click) to enter the path into your terminal.
 
 ## Installation
 
@@ -70,7 +71,6 @@ The tool reads its configuration from:
 ### Configuration Options
 
 * `save_dir`: Directory to store saved images (default: system temporary directory under `img2cli`).
-* `hotkey`: Activation global shortcut (default: `ctrl+shift+v`).
 * `output_format`: Format typed into the active CLI. Options:
   * `"raw"`: Raw file path (e.g. `/tmp/img2cli/img_123.jpg`).
   * `"markdown"`: Markdown image link (e.g. `![image](/tmp/img2cli/img_123.jpg)`).
