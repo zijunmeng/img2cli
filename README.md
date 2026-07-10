@@ -1,5 +1,7 @@
 # img2cli
 
+English | [简体中文](./README_zh.md)
+
 A fast, lightweight, and cross-platform command-line utility written in Rust that allows you to easily copy/cut screenshots from your local system clipboard directly into your command-line interface (CLI) tools (especially useful for multi-modal AI Agent CLIs running remotely over SSH).
 
 ## How it Works
