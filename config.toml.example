@@ -1,0 +1,50 @@
+# img2cli configuration file template
+# Copy this file to:
+#   Windows:  %USERPROFILE%\.config\img2cli\config.toml
+#   Linux/Mac: ~/.config/img2cli/config.toml
+
+# Directory where captured screenshots are saved locally.
+# If commented out, defaults to a folder under the system temp directory (e.g. %TEMP%\img2cli or /tmp/img2cli)
+# save_dir = "/tmp/img2cli"
+
+# Global hotkey shortcut to trigger saving and pasting.
+# Default is "ctrl+shift+v"
+hotkey = "ctrl+shift+v"
+
+# Format typed into the active CLI window.
+# Options:
+#   "raw":       path of image file, e.g. /tmp/img2cli/img_123.jpg
+#   "markdown":  markdown image link, e.g. ![image](/tmp/img2cli/img_123.jpg)
+#   "html":      HTML image tag, e.g. <img src="/tmp/img2cli/img_123.jpg" />
+#   "base64":    base64 data URI of compressed image, e.g. data:image/jpeg;base64,...
+output_format = "markdown"
+
+# Image compression quality level (0 to 100). Higher is better quality, lower is smaller file size.
+# Default is 80
+compress_quality = 80
+
+# Maximum width or height dimension of the image.
+# If the screenshot's dimensions exceed this, the image will be resized down to fit.
+# Comment out or set to 0 to disable resizing.
+# Default is 1024
+max_dimension = 1024
+
+# Workspace awareness: if enabled, img2cli attempts to detect the active terminal window's
+# current working directory. If a directory like "images" or "assets" exists in that CWD,
+# it will save the screenshot directly to that folder and type a relative path (e.g. ./images/img_123.jpg)
+# rather than an absolute temp path.
+# NOTE: Only supported on Linux/Unix (X11). Ignored if ssh upload is enabled.
+# Default is false
+workspace_aware = false
+
+# --- SSH / SCP Auto-Upload Settings ---
+# Enable this section if you run this tool locally on your Windows/Mac laptop, but your AI Agent CLI (agy)
+# runs on a remote Linux server. When you press the hotkey, the tool will save the screenshot locally,
+# automatically upload it via `scp` to your remote server, and type the remote file path into the terminal.
+# Note: This relies on your local openSSH client (already configured if you use VS Code SSH or Xshell).
+[ssh]
+enabled = false
+host = "your-ssh-host-alias-or-ip"   # Remote host IP, domain, or SSH config alias (e.g., S91)
+port = 22                            # Remote SSH port (optional, defaults to 22 or inherits from SSH config)
+username = "your-remote-username"    # Remote username (optional if using ssh config alias)
+remote_dir = "/tmp/img2cli"          # Remote directory on the server where the image will be uploaded
