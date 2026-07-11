@@ -1,5 +1,7 @@
 use crate::config::Config;
+#[cfg(unix)]
 use std::fs;
+#[cfg(unix)]
 use std::path::Path;
 use std::thread;
 use std::time::Duration;

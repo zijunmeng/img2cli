@@ -36,7 +36,7 @@ pub fn get_active_window_title() -> Option<String> {
     use windows_sys::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowTextW, GetWindowTextLengthW};
     unsafe {
         let hwnd = GetForegroundWindow();
-        if hwnd == 0 {
+        if hwnd.is_null() {
             return None;
         }
         let len = GetWindowTextLengthW(hwnd);
