@@ -27,7 +27,7 @@ fn main() {
         "run" => {
             use std::io::Write;
 
-            println!("=== img2cli v0.1.4 ===");
+            println!("=== img2cli v0.1.6 ===");
             println!("Welcome to img2cli - Clipboard screenshot helper for remote CLIs!\n");
 
             let mut auto_route = false;
@@ -61,6 +61,28 @@ fn main() {
             } else {
                 // Interactive Selection Loop
                 let mut current_config = config.clone();
+                
+                let is_dup = |new_ssh: &crate::config::SshConfig, list: &[crate::config::SshConfig], default_ssh: &Option<crate::config::SshConfig>| -> bool {
+                    let check = |item: &crate::config::SshConfig| -> bool {
+                        let hosts_match = item.host == new_ssh.host 
+                            || item.match_pattern.as_ref() == Some(&new_ssh.host)
+                            || Some(&item.host) == new_ssh.match_pattern.as_ref()
+                            || (item.match_pattern.is_some() && item.match_pattern == new_ssh.match_pattern);
+                        hosts_match && item.port == new_ssh.port
+                    };
+                    if let Some(def) = default_ssh {
+                        if check(def) {
+                            return true;
+                        }
+                    }
+                    for item in list {
+                        if check(item) {
+                            return true;
+                        }
+                    }
+                    false
+                };
+
                 loop {
                     println!("\n=== img2cli SSH Host Selection ===");
                     println!("Detected SSH hosts in your configuration:");
@@ -162,6 +184,10 @@ fn main() {
                         };
                         
                         let mut targets = current_config.ssh_targets.clone().unwrap_or_default();
+                        if is_dup(&new_ssh, &targets, &current_config.ssh) {
+                            println!("Warning: A configuration for this host already exists. Duplicate skipped!");
+                            continue;
+                        }
                         targets.push(new_ssh);
                         current_config.ssh_targets = Some(targets);
                         
@@ -194,20 +220,27 @@ fn main() {
                         let mut imported_count = 0;
                         let mut targets = current_config.ssh_targets.clone().unwrap_or_default();
                         
-                        if import_trimmed == "all" {
-                            for h in parsed_hosts {
-                                targets.push(h);
-                                imported_count += 1;
-                            }
+                        let to_import = if import_trimmed == "all" {
+                            parsed_hosts
                         } else {
+                            let mut selected = Vec::new();
                             let indices: Vec<&str> = import_trimmed.split(',').collect();
                             for idx_str in indices {
                                 if let Ok(idx) = idx_str.trim().parse::<usize>() {
                                     if idx >= 1 && idx <= parsed_hosts.len() {
-                                        targets.push(parsed_hosts[idx - 1].clone());
-                                        imported_count += 1;
+                                        selected.push(parsed_hosts[idx - 1].clone());
                                     }
                                 }
+                            }
+                            selected
+                        };
+                        
+                        for h in to_import {
+                            if is_dup(&h, &targets, &current_config.ssh) {
+                                println!("Skipping duplicate host: {} ({})", h.host, h.match_pattern.as_ref().unwrap_or(&h.host));
+                            } else {
+                                targets.push(h);
+                                imported_count += 1;
                             }
                         }
                         
@@ -219,7 +252,7 @@ fn main() {
                                 println!("Successfully imported {} host(s)!", imported_count);
                             }
                         } else {
-                            println!("No hosts were imported.");
+                            println!("No new hosts were imported (all selected were duplicates).");
                         }
                     }
                     else if choice == edit_target_idx {
@@ -312,7 +345,7 @@ fn main() {
                             continue;
                         }
                         
-                        println!("Select configuration index to delete (1-{}):", choices.len());
+                        println!("Select configuration index to delete (separate by commas, e.g. 1,3 or type 'all'):");
                         for (i, item) in choices.iter().enumerate() {
                             let (ssh_opt, _, config_type, _) = item;
                             if let Some(ssh) = ssh_opt {
@@ -324,26 +357,52 @@ fn main() {
                         std::io::stdout().flush().unwrap();
                         let mut delete_input = String::new();
                         std::io::stdin().read_line(&mut delete_input).unwrap();
-                        if let Ok(idx) = delete_input.trim().parse::<usize>() {
-                            if idx >= 1 && idx <= choices.len() {
-                                let (_, _, config_type, inner_idx) = &choices[idx - 1];
-                                if config_type == "default" {
-                                    current_config.ssh = None;
-                                    println!("Default SSH configuration cleared.");
-                                } else {
-                                    if let Some(ref mut targets) = current_config.ssh_targets {
-                                        targets.remove(*inner_idx);
-                                        println!("Host configuration successfully removed!");
+                        let delete_trimmed = delete_input.trim();
+                        
+                        let mut indices_to_remove = Vec::new();
+                        if delete_trimmed == "all" {
+                            for i in 0..choices.len() {
+                                indices_to_remove.push(i);
+                            }
+                        } else {
+                            let parts: Vec<&str> = delete_trimmed.split(',').collect();
+                            for part in parts {
+                                if let Ok(idx) = part.trim().parse::<usize>() {
+                                    if idx >= 1 && idx <= choices.len() {
+                                        indices_to_remove.push(idx - 1);
                                     }
                                 }
-                                
-                                let config_path = crate::config::Config::config_file_path();
-                                if let Ok(toml_str) = toml::to_string(&current_config) {
-                                    let _ = std::fs::write(&config_path, toml_str);
-                                }
-                            } else {
-                                println!("Invalid index.");
                             }
+                        }
+                        
+                        // Sort descending to remove without shifting indices of remaining elements
+                        indices_to_remove.sort_by(|a, b| b.cmp(a));
+                        indices_to_remove.dedup();
+                        
+                        let mut deleted_count = 0;
+                        for idx in indices_to_remove {
+                            let (_, _, config_type, inner_idx) = &choices[idx];
+                            if config_type == "default" {
+                                current_config.ssh = None;
+                                deleted_count += 1;
+                            } else {
+                                if let Some(ref mut targets) = current_config.ssh_targets {
+                                    if *inner_idx < targets.len() {
+                                        targets.remove(*inner_idx);
+                                        deleted_count += 1;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if deleted_count > 0 {
+                            let config_path = crate::config::Config::config_file_path();
+                            if let Ok(toml_str) = toml::to_string(&current_config) {
+                                let _ = std::fs::write(&config_path, toml_str);
+                                println!("Successfully removed {} host configuration(s)!", deleted_count);
+                            }
+                        } else {
+                            println!("No hosts were removed.");
                         }
                     }
                     else if choice >= 1 && choice <= choices.len() {
