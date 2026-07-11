@@ -92,7 +92,7 @@ if ($reconfigure) {
     $sshHost = ""
     $sshPort = "22"
     $sshUser = ""
-    $sshRemoteDir = "/s1/SHARE/mengzijun/tmp/img2cli"
+    $sshRemoteDir = ""
     $sshTargetsList = @()
     
     if ($hosts.Count -gt 0) {
@@ -179,9 +179,13 @@ if ($reconfigure) {
     }
     
     if ($sshEnabled) {
-        $tempRemoteDir = (Read-Host "Enter remote directory for saving images [default: /s1/SHARE/mengzijun/tmp/img2cli]").Trim()
+        $resolvedUser = if ($sshUser -ne "") { $sshUser } else { "your_username" }
+        $defaultDir = "/s1/SHARE/$resolvedUser/tmp/img2cli"
+        $tempRemoteDir = (Read-Host "Enter remote directory for saving images [default: $defaultDir]").Trim()
         if ($tempRemoteDir -ne "") {
             $sshRemoteDir = $tempRemoteDir
+        } else {
+            $sshRemoteDir = $defaultDir
         }
         
         # Ask to verify/authorize SSH keys

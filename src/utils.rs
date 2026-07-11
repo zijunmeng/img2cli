@@ -269,7 +269,7 @@ pub fn parse_ssh_config() -> Vec<crate::config::SshConfig> {
                         host: host_name.clone(),
                         port: Some(22),
                         username: None,
-                        remote_dir: "/s1/SHARE/mengzijun/tmp/img2cli".to_string(),
+                        remote_dir: "/tmp/img2cli".to_string(),
                         match_pattern: Some(host_name),
                     });
                 }
@@ -278,7 +278,11 @@ pub fn parse_ssh_config() -> Vec<crate::config::SshConfig> {
                 if parts.len() >= 2 {
                     match parts[0].to_lowercase().as_str() {
                         "hostname" => h.host = parts[1].to_string(),
-                        "user" => h.username = Some(parts[1].to_string()),
+                        "user" => {
+                            let user_str = parts[1].to_string();
+                            h.username = Some(user_str.clone());
+                            h.remote_dir = format!("/s1/SHARE/{}/tmp/img2cli", user_str);
+                        }
                         "port" => h.port = parts[1].parse::<u16>().ok(),
                         _ => {}
                     }

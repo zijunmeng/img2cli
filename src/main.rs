@@ -27,7 +27,7 @@ fn main() {
         "run" => {
             use std::io::Write;
 
-            println!("=== img2cli v0.1.7 ===");
+            println!("=== img2cli v0.1.8 ===");
             println!("Welcome to img2cli - Clipboard screenshot helper for remote CLIs!\n");
 
             let mut auto_route = false;

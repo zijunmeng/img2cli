@@ -104,8 +104,8 @@ enabled = true
 match_pattern = "S90"                 # Match if active window title contains "S90" (case-insensitive)
 host = "172.16.190.90"
 port = 22
-username = "mengzijun"
-remote_dir = "/s1/SHARE/mengzijun/tmp/img2cli"
+username = "your_username"
+remote_dir = "/s1/SHARE/your_username/tmp/img2cli"
 
 # Target 2: Dev Box
 [[ssh_targets]]

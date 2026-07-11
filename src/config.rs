@@ -58,9 +58,9 @@ impl Default for Config {
             wrap_single_quotes: true,
             ssh: Some(SshConfig {
                 enabled: false,
-                host: "S91".to_string(),
+                host: "your_ssh_alias_or_ip".to_string(),
                 port: Some(22),
-                username: Some("mengzijun".to_string()),
+                username: Some("your_username".to_string()),
                 remote_dir: "/tmp/img2cli".to_string(),
                 match_pattern: None,
             }),

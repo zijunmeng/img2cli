@@ -104,8 +104,8 @@ enabled = true
 match_pattern = "S90"                 # 当工作窗口标题中包含 "S90" 时匹配（不区分大小写）
 host = "172.16.190.90"
 port = 22
-username = "mengzijun"
-remote_dir = "/s1/SHARE/mengzijun/tmp/img2cli"
+username = "your_username"
+remote_dir = "/s1/SHARE/your_username/tmp/img2cli"
 
 # 目标服务器 2：开发环境
 [[ssh_targets]]
