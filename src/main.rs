@@ -27,7 +27,7 @@ fn main() {
         "run" => {
             use std::io::Write;
 
-            println!("=== img2cli v0.1.9 ===");
+            println!("=== img2cli v0.2.0 ===");
             println!("Welcome to img2cli - Clipboard screenshot helper for remote CLIs!\n");
 
             let mut auto_route = false;
@@ -127,7 +127,16 @@ fn main() {
                     let mut input = String::new();
                     std::io::stdin().read_line(&mut input).unwrap();
                     let trimmed = input.trim();
-                    let choice = if trimmed.is_empty() { auto_idx } else { trimmed.parse::<usize>().unwrap_or(0) };
+                    let mut choice = if trimmed.is_empty() { auto_idx } else { trimmed.parse::<usize>().unwrap_or(0) };
+                    
+                    while choice == 0 || choice > delete_target_idx {
+                        print!("Invalid choice, please select a valid option (1-{}): ", delete_target_idx);
+                        std::io::stdout().flush().unwrap();
+                        let mut retry_input = String::new();
+                        std::io::stdin().read_line(&mut retry_input).unwrap();
+                        let retry_trimmed = retry_input.trim();
+                        choice = if retry_trimmed.is_empty() { auto_idx } else { retry_trimmed.parse::<usize>().unwrap_or(0) };
+                    }
                     
                     if choice == auto_idx {
                         auto_route = true;
