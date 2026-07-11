@@ -236,3 +236,58 @@ pub fn upload_via_scp(local_path: &Path, ssh: &crate::config::SshConfig) -> Resu
 
     Ok(remote_dest)
 }
+
+pub fn parse_ssh_config() -> Vec<crate::config::SshConfig> {
+    let ssh_config_path = if cfg!(windows) {
+        let userprofile = std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\".to_string());
+        std::path::PathBuf::from(userprofile).join(".ssh").join("config")
+    } else {
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+        std::path::PathBuf::from(home).join(".ssh").join("config")
+    };
+
+    if !ssh_config_path.exists() {
+        return Vec::new();
+    }
+
+    let mut hosts = Vec::new();
+    if let Ok(content) = std::fs::read_to_string(ssh_config_path) {
+        let mut current_host = None;
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                continue;
+            }
+            if trimmed.to_lowercase().starts_with("host ") {
+                if let Some(h) = current_host.take() {
+                    hosts.push(h);
+                }
+                let host_name = trimmed[5..].trim().to_string();
+                if host_name != "*" {
+                    current_host = Some(crate::config::SshConfig {
+                        enabled: true,
+                        host: host_name.clone(),
+                        port: Some(22),
+                        username: None,
+                        remote_dir: "/s1/SHARE/mengzijun/tmp/img2cli".to_string(),
+                        match_pattern: Some(host_name),
+                    });
+                }
+            } else if let Some(ref mut h) = current_host {
+                let parts: Vec<&str> = trimmed.split_whitespace().collect();
+                if parts.len() >= 2 {
+                    match parts[0].to_lowercase().as_str() {
+                        "hostname" => h.host = parts[1].to_string(),
+                        "user" => h.username = Some(parts[1].to_string()),
+                        "port" => h.port = parts[1].parse::<u16>().ok(),
+                        _ => {}
+                    }
+                }
+            }
+        }
+        if let Some(h) = current_host {
+            hosts.push(h);
+        }
+    }
+    hosts
+}
