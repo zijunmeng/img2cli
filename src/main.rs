@@ -84,14 +84,81 @@ fn main() {
                         println!("  [{}] [Auto Route] Automatically switch based on active window title", auto_idx);
                         choices.push((None, true));
                         
-                        print!("Select target host to use (1-{}) [default: {}]: ", auto_idx, auto_idx);
+                        let new_target_idx = choices.len() + 1;
+                        println!("  [{}] [New Target] Add a new SSH host configuration", new_target_idx);
+                        
+                        print!("Select target host to use (1-{}) [default: {}]: ", new_target_idx, auto_idx);
                         std::io::stdout().flush().unwrap();
                         
                         let mut input = String::new();
                         std::io::stdin().read_line(&mut input).unwrap();
                         let choice = input.trim().parse::<usize>().unwrap_or(auto_idx);
                         
-                        if choice >= 1 && choice <= choices.len() {
+                        if choice == new_target_idx {
+                            println!("\n--- Add New SSH Host Configuration ---");
+                            
+                            print!("Enter SSH Host (IP, Domain or SSH Alias): ");
+                            std::io::stdout().flush().unwrap();
+                            let mut host = String::new();
+                            std::io::stdin().read_line(&mut host).unwrap();
+                            let host = host.trim().to_string();
+                            
+                            if host.is_empty() {
+                                eprintln!("Error: SSH Host cannot be empty!");
+                                std::process::exit(1);
+                            }
+                            
+                            print!("Enter SSH Port [default: 22]: ");
+                            std::io::stdout().flush().unwrap();
+                            let mut port_str = String::new();
+                            std::io::stdin().read_line(&mut port_str).unwrap();
+                            let port = port_str.trim().parse::<u16>().ok();
+                            
+                            print!("Enter SSH Username: ");
+                            std::io::stdout().flush().unwrap();
+                            let mut username = String::new();
+                            std::io::stdin().read_line(&mut username).unwrap();
+                            let username_opt = if username.trim().is_empty() { None } else { Some(username.trim().to_string()) };
+                            
+                            print!("Enter Window Title Match Pattern (e.g. S97): ");
+                            std::io::stdout().flush().unwrap();
+                            let mut pattern = String::new();
+                            std::io::stdin().read_line(&mut pattern).unwrap();
+                            let pattern_opt = if pattern.trim().is_empty() { Some(host.clone()) } else { Some(pattern.trim().to_string()) };
+                            
+                            let default_remote_dir = config.ssh.as_ref().map(|s| s.remote_dir.clone()).unwrap_or_else(|| "/tmp/img2cli".to_string());
+                            print!("Enter Remote Directory [default: {}]: ", default_remote_dir);
+                            std::io::stdout().flush().unwrap();
+                            let mut remote_dir = String::new();
+                            std::io::stdin().read_line(&mut remote_dir).unwrap();
+                            let remote_dir = if remote_dir.trim().is_empty() { default_remote_dir } else { remote_dir.trim().to_string() };
+                            
+                            let new_ssh = crate::config::SshConfig {
+                                enabled: true,
+                                host: host.clone(),
+                                port,
+                                username: username_opt,
+                                remote_dir,
+                                match_pattern: pattern_opt,
+                            };
+                            
+                            let mut updated_config = config.clone();
+                            let mut targets = updated_config.ssh_targets.unwrap_or_default();
+                            targets.push(new_ssh.clone());
+                            updated_config.ssh_targets = Some(targets);
+                            
+                            let config_path = crate::config::Config::config_file_path();
+                            if let Ok(toml_str) = toml::to_string(&updated_config) {
+                                if std::fs::write(&config_path, toml_str).is_ok() {
+                                    println!("New SSH host successfully saved to config.toml!");
+                                } else {
+                                    eprintln!("Warning: Failed to save new host to config file.");
+                                }
+                            }
+                            
+                            override_ssh = Some(new_ssh);
+                            auto_route = false;
+                        } else if choice >= 1 && choice <= choices.len() {
                             let (selected_ssh, auto) = &choices[choice - 1];
                             override_ssh = selected_ssh.clone();
                             auto_route = *auto;
