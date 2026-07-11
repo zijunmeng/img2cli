@@ -4,31 +4,48 @@ use std::path::PathBuf;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SshConfig {
+    #[serde(default)]
     pub enabled: bool,
     pub host: String,
     pub port: Option<u16>,
     pub username: Option<String>,
     pub remote_dir: String,
+    #[serde(default)]
     pub match_pattern: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Config {
+    #[serde(default)]
     pub save_dir: Option<PathBuf>,
-    pub hotkey: String,
+    #[serde(default = "default_output_format")]
     pub output_format: String, // "raw", "markdown", "html", "base64"
+    #[serde(default = "default_compress_quality")]
     pub compress_quality: u8, // 0 - 100
+    #[serde(default = "default_max_dimension")]
     pub max_dimension: Option<u32>,
+    #[serde(default)]
     pub workspace_aware: bool,
+    #[serde(default)]
     pub ssh: Option<SshConfig>,
+    #[serde(default)]
     pub ssh_targets: Option<Vec<SshConfig>>,
+}
+
+fn default_output_format() -> String {
+    "markdown".to_string()
+}
+fn default_compress_quality() -> u8 {
+    80
+}
+fn default_max_dimension() -> Option<u32> {
+    Some(1024)
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             save_dir: None,
-            hotkey: "ctrl+shift+v".to_string(),
             output_format: "markdown".to_string(),
             compress_quality: 80,
             max_dimension: Some(1024),

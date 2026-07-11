@@ -142,11 +142,11 @@ pub fn simulate_typing(text: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub fn listen_for_hotkey<F>(config: &Config, callback: F) -> Result<(), String>
+pub fn listen_for_hotkey<F>(_config: &Config, callback: F) -> Result<(), String>
 where
     F: FnMut() + Send + 'static,
 {
-    let target_hotkey = Hotkey::parse(&config.hotkey)?;
+    let target_hotkey = Hotkey::parse("ctrl+shift+v")?;
     println!("Listening for hotkey: {:?}", target_hotkey);
 
     let modifier_state = Arc::new(Mutex::new(ModifierState::default()));
