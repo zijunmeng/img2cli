@@ -188,6 +188,10 @@ if ($reconfigure) {
             $sshRemoteDir = $defaultDir
         }
         
+        if ($sshRemoteDir -notlike "/s1/SHARE/*" -and $sshRemoteDir -notlike "C:*" -and $sshRemoteDir -notlike "\\*") {
+            Write-Host "`nTip: If you are using a shared cluster environment, make sure '$sshRemoteDir' is inside a network-shared directory (e.g. starts with /s1/SHARE/) so that AI Agents running on other nodes can access the uploaded images." -ForegroundColor Yellow
+        }
+        
         # Ask to verify/authorize SSH keys
         $verifyKeys = (Read-Host "Do you want to verify/authorize SSH keys for passwordless login on the remote servers? (y/n) [default: y]").Trim().ToLower()
         if ($verifyKeys -ne 'n') {
