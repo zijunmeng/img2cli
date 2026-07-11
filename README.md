@@ -88,8 +88,33 @@ The tool reads its configuration from:
 [ssh]
 enabled = true                       # Set to true to upload screenshots from local to remote
 host = "your-ssh-host-alias-or-ip"   # Remote SSH Host IP or ~/.ssh/config alias (e.g., S91)
+port = 22                            # Remote SSH port (optional, defaults to 22 or inherits from SSH config)
 username = "your-remote-username"    # Remote username (optional if using SSH alias)
 remote_dir = "/tmp/img2cli"          # Directory on the remote server to store the uploaded image
+```
+
+### `[[ssh_targets]]` Multi-Server Routing (Advanced)
+
+If you work on multiple remote servers simultaneously (e.g. multiple VS Code SSH windows or Xshell tabs), you can define matching rules in `config.toml`. `img2cli` will automatically detect the active window's title, check if it contains your `match_pattern`, and upload to the corresponding server. If no pattern matches, it will fallback to the default `[ssh]` target.
+
+```toml
+# Target 1: S90 Server
+[[ssh_targets]]
+enabled = true
+match_pattern = "S90"                 # Match if active window title contains "S90" (case-insensitive)
+host = "172.16.190.90"
+port = 22
+username = "mengzijun"
+remote_dir = "/s1/SHARE/mengzijun/tmp/img2cli"
+
+# Target 2: Dev Box
+[[ssh_targets]]
+enabled = true
+match_pattern = "my-dev-box"          # Match if active window title contains "my-dev-box"
+host = "10.0.0.5"
+port = 2222
+username = "root"
+remote_dir = "/tmp/img2cli"
 ```
 
 ---

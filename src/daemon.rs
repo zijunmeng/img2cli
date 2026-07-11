@@ -234,48 +234,71 @@ fn handle_clipboard_image(config: &Config) {
                 }
             }
 
-            let final_output = if let Some(ssh) = &config.ssh {
-                if ssh.enabled {
-                    match crate::utils::upload_via_scp(&local_dest, config) {
-                        Ok(remote_path) => {
-                            match config.output_format.to_lowercase().as_str() {
-                                "markdown" => format!("![image]({})", remote_path),
-                                "html" => format!("<img src=\"{}\" />", remote_path),
-                                _ => remote_path,
+            // Determine active window title and find matching target
+            let mut active_ssh = None;
+            if let Some(title) = crate::utils::get_active_window_title() {
+                println!("Active window title: {:?}", title);
+                if let Some(targets) = &config.ssh_targets {
+                    for target in targets {
+                        if let Some(pattern) = &target.match_pattern {
+                            if title.to_lowercase().contains(&pattern.to_lowercase()) {
+                                println!("Match found: target config {:?} matches title {:?}", target.host, title);
+                                active_ssh = Some(target.clone());
+                                break;
                             }
-                        }
-                        Err(e) => {
-                            let err_msg = format!("SSH upload failed: {}", e);
-                            eprintln!("{}", err_msg);
-                            crate::utils::send_notification("img2cli Error", &err_msg);
-                            return;
                         }
                     }
-                } else {
-                    if let Some((target_path, true)) = save_path_opt {
-                        if let Some(parent) = target_path.parent() {
-                            let _ = std::fs::create_dir_all(parent);
+                }
+            }
+
+            // If no match was found, fall back to the default SSH config (if enabled)
+            if active_ssh.is_none() {
+                if let Some(default_ssh) = &config.ssh {
+                    if default_ssh.enabled {
+                        println!("No matching target found. Falling back to default SSH configuration.");
+                        active_ssh = Some(default_ssh.clone());
+                    }
+                }
+            }
+
+            let final_output = if let Some(ssh) = &active_ssh {
+                match crate::utils::upload_via_scp(&local_dest, ssh) {
+                    Ok(remote_path) => {
+                        match config.output_format.to_lowercase().as_str() {
+                            "markdown" => format!("![image]({})", remote_path),
+                            "html" => format!("<img src=\"{}\" />", remote_path),
+                            _ => remote_path,
                         }
-                        if std::fs::rename(&local_dest, &target_path).is_ok() {
-                            let parent_name = target_path.parent()
-                                .and_then(|p| p.file_name())
-                                .and_then(|s| s.to_str())
-                                .unwrap_or("images");
-                            let rel_file_path = format!("./{}/{}", parent_name, filename);
-                            match config.output_format.to_lowercase().as_str() {
-                                "markdown" => format!("![image]({})", rel_file_path),
-                                "html" => format!("<img src=\"{}\" />", rel_file_path),
-                                _ => rel_file_path,
-                            }
-                        } else {
-                            output_str
+                    }
+                    Err(e) => {
+                        let err_msg = format!("SSH upload failed: {}", e);
+                        eprintln!("{}", err_msg);
+                        crate::utils::send_notification("img2cli Error", &err_msg);
+                        return;
+                    }
+                }
+            } else {
+                if let Some((target_path, true)) = save_path_opt {
+                    if let Some(parent) = target_path.parent() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                    if std::fs::rename(&local_dest, &target_path).is_ok() {
+                        let parent_name = target_path.parent()
+                            .and_then(|p| p.file_name())
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("images");
+                        let rel_file_path = format!("./{}/{}", parent_name, filename);
+                        match config.output_format.to_lowercase().as_str() {
+                            "markdown" => format!("![image]({})", rel_file_path),
+                            "html" => format!("<img src=\"{}\" />", rel_file_path),
+                            _ => rel_file_path,
                         }
                     } else {
                         output_str
                     }
+                } else {
+                    output_str
                 }
-            } else {
-                output_str
             };
 
             // Write the formatted output path text back to the clipboard

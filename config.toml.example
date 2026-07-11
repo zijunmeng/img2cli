@@ -7,10 +7,6 @@
 # If commented out, defaults to a folder under the system temp directory (e.g. %TEMP%\img2cli or /tmp/img2cli)
 # save_dir = "/tmp/img2cli"
 
-# Global hotkey shortcut to trigger saving and pasting.
-# Default is "ctrl+shift+v"
-hotkey = "ctrl+shift+v"
-
 # Format typed into the active CLI window.
 # Options:
 #   "raw":       path of image file, e.g. /tmp/img2cli/img_123.jpg
@@ -37,14 +33,37 @@ max_dimension = 1024
 # Default is false
 workspace_aware = false
 
-# --- SSH / SCP Auto-Upload Settings ---
-# Enable this section if you run this tool locally on your Windows/Mac laptop, but your AI Agent CLI (agy)
-# runs on a remote Linux server. When you press the hotkey, the tool will save the screenshot locally,
-# automatically upload it via `scp` to your remote server, and type the remote file path into the terminal.
-# Note: This relies on your local openSSH client (already configured if you use VS Code SSH or Xshell).
+# --- SSH / SCP Auto-Upload Settings (Default Target) ---
+# Enable this section if you run this tool locally on your Windows/Mac laptop, but your AI Agent CLI
+# runs on a remote Linux server. The tool will automatically upload the screenshot via `scp`
+# to the remote server, and write the remote path text to your clipboard.
 [ssh]
 enabled = false
 host = "your-ssh-host-alias-or-ip"   # Remote host IP, domain, or SSH config alias (e.g., S91)
 port = 22                            # Remote SSH port (optional, defaults to 22 or inherits from SSH config)
 username = "your-remote-username"    # Remote username (optional if using ssh config alias)
 remote_dir = "/tmp/img2cli"          # Remote directory on the server where the image will be uploaded
+
+# --- Advanced: Multi-Server Routing ---
+# If you work on multiple servers simultaneously (e.g. multiple VS Code SSH windows or Xshell sessions),
+# you can define matching rules here. img2cli will automatically detect the active window's title,
+# match it against these patterns, and upload to the corresponding server.
+# If no pattern matches, it will fallback to the default [ssh] block above.
+
+# Example Target 1:
+# [[ssh_targets]]
+# enabled = true
+# match_pattern = "S90"               # Match if the active window title contains "S90"
+# host = "172.16.190.90"
+# port = 22
+# username = "mengzijun"
+# remote_dir = "/s1/SHARE/mengzijun/tmp/img2cli"
+
+# Example Target 2:
+# [[ssh_targets]]
+# enabled = true
+# match_pattern = "my-dev-box"        # Match if the active window title contains "my-dev-box"
+# host = "10.0.0.5"
+# port = 2222
+# username = "root"
+# remote_dir = "/tmp/img2cli"

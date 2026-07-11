@@ -9,6 +9,7 @@ pub struct SshConfig {
     pub port: Option<u16>,
     pub username: Option<String>,
     pub remote_dir: String,
+    pub match_pattern: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -20,6 +21,7 @@ pub struct Config {
     pub max_dimension: Option<u32>,
     pub workspace_aware: bool,
     pub ssh: Option<SshConfig>,
+    pub ssh_targets: Option<Vec<SshConfig>>,
 }
 
 impl Default for Config {
@@ -37,7 +39,9 @@ impl Default for Config {
                 port: Some(22),
                 username: Some("mengzijun".to_string()),
                 remote_dir: "/tmp/img2cli".to_string(),
+                match_pattern: None,
             }),
+            ssh_targets: None,
         }
     }
 }

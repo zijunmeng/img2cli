@@ -93,6 +93,30 @@ username = "your-remote-username"    # 远程服务器用户名
 remote_dir = "/tmp/img2cli"          # 图片上传至远程服务器的目标文件夹
 ```
 
+### `[[ssh_targets]]` 多服务器自动感知路由（高级）
+
+如果您同时在多个远程服务器上工作（例如在不同的 VS Code SSH 窗口或 Xshell 标签页之间切换），您可以在 `config.toml` 中定义多组服务器路由规则。`img2cli` 会自动获取当前最前端的工作窗口标题，并检查其中是否包含您指定的 `match_pattern`。若匹配成功则自动上传到对应服务器；若均未匹配成功，则自动降级使用默认的 `[ssh]` 配置。
+
+```toml
+# 目标服务器 1：S90 节点
+[[ssh_targets]]
+enabled = true
+match_pattern = "S90"                 # 当工作窗口标题中包含 "S90" 时匹配（不区分大小写）
+host = "172.16.190.90"
+port = 22
+username = "mengzijun"
+remote_dir = "/s1/SHARE/mengzijun/tmp/img2cli"
+
+# 目标服务器 2：开发环境
+[[ssh_targets]]
+enabled = true
+match_pattern = "my-dev-box"          # 当工作窗口标题中包含 "my-dev-box" 时匹配
+host = "10.0.0.5"
+port = 2222
+username = "root"
+remote_dir = "/tmp/img2cli"
+```
+
 ---
 
 ## 命令行用法 (Linux/Mac 常用指令)

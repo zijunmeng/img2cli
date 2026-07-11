@@ -19,16 +19,43 @@ pub fn send_notification(summary: &str, body: &str) {
         .timeout(3000)
         .show()
         .is_err()
-    {
-        #[cfg(unix)]
         {
-            // Fallback to notify-send CLI if dbus notification fails on Linux
-            Command::new("notify-send")
-                .args(&[summary, body])
-                .status()
-                .ok();
+            #[cfg(unix)]
+            {
+                // Fallback to notify-send CLI if dbus notification fails on Linux
+                Command::new("notify-send")
+                    .args(&[summary, body])
+                    .status()
+                    .ok();
+            }
         }
+}
+
+#[cfg(windows)]
+pub fn get_active_window_title() -> Option<String> {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowTextW, GetWindowTextLengthW};
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd == 0 {
+            return None;
+        }
+        let len = GetWindowTextLengthW(hwnd);
+        if len == 0 {
+            return None;
+        }
+        let mut buf = vec![0u16; (len + 1) as usize];
+        let read = GetWindowTextW(hwnd, buf.as_mut_ptr(), buf.len() as i32);
+        if read == 0 {
+            return None;
+        }
+        buf.truncate(read as usize);
+        String::from_utf16(&buf).ok()
     }
+}
+
+#[cfg(not(windows))]
+pub fn get_active_window_title() -> Option<String> {
+    None
 }
 
 pub fn clean_old_files(save_dir: &Path, max_age_hours: u32) -> std::io::Result<u32> {
@@ -163,11 +190,10 @@ pub fn get_active_terminal_cwd() -> Option<PathBuf> {
     None
 }
 
-pub fn upload_via_scp(local_path: &Path, config: &crate::config::Config) -> Result<String, String> {
-    let ssh = match &config.ssh {
-        Some(ssh) if ssh.enabled => ssh,
-        _ => return Err("SSH upload is not enabled in config".to_string()),
-    };
+pub fn upload_via_scp(local_path: &Path, ssh: &crate::config::SshConfig) -> Result<String, String> {
+    if !ssh.enabled {
+        return Err("SSH upload is not enabled".to_string());
+    }
 
     let filename = local_path.file_name()
         .and_then(|f| f.to_str())
