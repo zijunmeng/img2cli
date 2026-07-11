@@ -44,7 +44,7 @@ pub fn start_daemon(config: &Config) -> Result<(), String> {
     
     match daemonize.start() {
         Ok(_) => {
-            if let Err(e) = run_service(config) {
+            if let Err(e) = run_service(config, None, true) {
                 eprintln!("Daemon service failed: {}", e);
                 std::process::exit(1);
             }
@@ -168,7 +168,7 @@ fn is_process_running(pid: i32) -> bool {
     Path::new(&proc_path).exists()
 }
 
-pub fn run_service(config: &Config) -> Result<(), String> {
+pub fn run_service(config: &Config, override_ssh: Option<crate::config::SshConfig>, auto_route: bool) -> Result<(), String> {
     println!("Clipboard monitoring service started. Initializing...");
 
     // 1. Initial cleanup of temporary files
@@ -189,6 +189,7 @@ pub fn run_service(config: &Config) -> Result<(), String> {
 
     // 3. Clipboard polling loop
     let mut last_image_sig = None;
+    let override_ssh_clone = override_ssh.clone();
 
     loop {
         if let Ok(mut cb) = arboard::Clipboard::new() {
@@ -206,7 +207,7 @@ pub fn run_service(config: &Config) -> Result<(), String> {
                     println!("New image in clipboard detected! Processing...");
                     
                     // Trigger the upload and write the path back to the clipboard
-                    handle_clipboard_image(config);
+                    handle_clipboard_image(config, &override_ssh_clone, auto_route);
                 }
             }
         }
@@ -214,7 +215,7 @@ pub fn run_service(config: &Config) -> Result<(), String> {
     }
 }
 
-fn handle_clipboard_image(config: &Config) {
+fn handle_clipboard_image(config: &Config, override_ssh: &Option<crate::config::SshConfig>, auto_route: bool) {
     let filename = crate::utils::generate_unique_filename();
     let local_dest = config.get_save_dir().join(&filename);
 
@@ -238,15 +239,20 @@ fn handle_clipboard_image(config: &Config) {
 
             // Determine active window title and find matching target
             let mut active_ssh = None;
-            if let Some(title) = crate::utils::get_active_window_title() {
-                println!("Active window title: {:?}", title);
-                if let Some(targets) = &config.ssh_targets {
-                    for target in targets {
-                        if let Some(pattern) = &target.match_pattern {
-                            if title.to_lowercase().contains(&pattern.to_lowercase()) {
-                                println!("Match found: target config {:?} matches title {:?}", target.host, title);
-                                active_ssh = Some(target.clone());
-                                break;
+
+            if let Some(ssh) = override_ssh {
+                active_ssh = Some(ssh.clone());
+            } else if auto_route {
+                if let Some(title) = crate::utils::get_active_window_title() {
+                    println!("Active window title: {:?}", title);
+                    if let Some(targets) = &config.ssh_targets {
+                        for target in targets {
+                            if let Some(pattern) = &target.match_pattern {
+                                if title.to_lowercase().contains(&pattern.to_lowercase()) {
+                                    println!("Match found: target config {:?} matches title {:?}", target.host, title);
+                                    active_ssh = Some(target.clone());
+                                    break;
+                                }
                             }
                         }
                     }
