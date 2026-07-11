@@ -26,6 +26,8 @@ pub struct Config {
     pub max_dimension: Option<u32>,
     #[serde(default)]
     pub workspace_aware: bool,
+    #[serde(default = "default_wrap_single_quotes")]
+    pub wrap_single_quotes: bool,
     #[serde(default)]
     pub ssh: Option<SshConfig>,
     #[serde(default)]
@@ -41,6 +43,9 @@ fn default_compress_quality() -> u8 {
 fn default_max_dimension() -> Option<u32> {
     Some(1024)
 }
+fn default_wrap_single_quotes() -> bool {
+    true
+}
 
 impl Default for Config {
     fn default() -> Self {
@@ -50,6 +55,7 @@ impl Default for Config {
             compress_quality: 80,
             max_dimension: Some(1024),
             workspace_aware: false,
+            wrap_single_quotes: true,
             ssh: Some(SshConfig {
                 enabled: false,
                 host: "S91".to_string(),

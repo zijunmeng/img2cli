@@ -272,10 +272,15 @@ fn handle_clipboard_image(config: &Config, override_ssh: &Option<crate::config::
             let final_output = if let Some(ssh) = &active_ssh {
                 match crate::utils::upload_via_scp(&local_dest, ssh) {
                     Ok(remote_path) => {
-                        match config.output_format.to_lowercase().as_str() {
+                        let base_format = match config.output_format.to_lowercase().as_str() {
                             "markdown" => format!("![image]({})", remote_path),
                             "html" => format!("<img src=\"{}\" />", remote_path),
                             _ => remote_path,
+                        };
+                        if config.wrap_single_quotes {
+                            format!("'{}'", base_format)
+                        } else {
+                            base_format
                         }
                     }
                     Err(e) => {
@@ -296,10 +301,15 @@ fn handle_clipboard_image(config: &Config, override_ssh: &Option<crate::config::
                             .and_then(|s| s.to_str())
                             .unwrap_or("images");
                         let rel_file_path = format!("./{}/{}", parent_name, filename);
-                        match config.output_format.to_lowercase().as_str() {
+                        let base_format = match config.output_format.to_lowercase().as_str() {
                             "markdown" => format!("![image]({})", rel_file_path),
                             "html" => format!("<img src=\"{}\" />", rel_file_path),
                             _ => rel_file_path,
+                        };
+                        if config.wrap_single_quotes {
+                            format!("'{}'", base_format)
+                        } else {
+                            base_format
                         }
                     } else {
                         output_str
