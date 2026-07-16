@@ -19,7 +19,6 @@ image = { version = "0.25.2", default-features = false, features = ["png", "jpeg
 log = "0.4"
 russh = "0.51"
 russh-sftp = "2.1"
-xcap = "0.5"
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "net", "io-util", "time"] }
 
 [build-dependencies]
@@ -34,4 +33,9 @@ keyring = { version = "3", default-features = false, features = ["apple-native"]
 
 [target.'cfg(target_os = "linux")'.dependencies]
 keyring = { version = "3", default-features = false, features = ["sync-secret-service", "crypto-rust"] }
+
+# xcap's Linux backend (PipeWire/libspa) is incompatible with older system
+# libspa (Ubuntu 22.04), so screen capture is built for Windows/macOS only.
+[target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
+xcap = "0.5"
 

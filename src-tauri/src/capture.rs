@@ -1,25 +1,31 @@
 //! Built-in screenshot region capture (Snipaste-style).
 //!
-//! Flow: screenshot hotkey -> open a fullscreen transparent overlay -> user
-//! drags a region -> `capture_region` closes the overlay, grabs the primary
-//! monitor via xcap, crops to the selection, puts the region on the clipboard,
-//! then runs the existing clipboard -> compress/route/upload/inject pipeline.
-
-use std::borrow::Cow;
-use std::time::Duration;
+//! Screenshot hotkey -> fullscreen transparent overlay -> drag a region ->
+//! `capture_region` grabs the primary monitor (xcap), crops to the selection,
+//! puts it on the clipboard, then runs the existing clipboard -> inject flow.
+//!
+//! Note: xcap's Linux backend pulls in PipeWire/libspa which is incompatible
+//! with older system libspa (e.g. Ubuntu 22.04), so the actual screen grab is
+//! built only for Windows and macOS. On Linux the overlay is not opened.
 
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
 use crate::daemon::{self, DaemonState};
 
-/// Open the fullscreen, transparent, always-on-top region-selection overlay.
+/// Open the fullscreen region-selection overlay (Windows / macOS only).
 pub fn open_capture_overlay(app: &AppHandle) {
-    if let Some(existing) = app.get_webview_window("capture") {
-        let _ = existing.show();
-        let _ = existing.set_focus();
-        return;
-    }
-    let _ = WebviewWindowBuilder::new(app, "capture", WebviewUrl::App("index.html?capture=1".into()))
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    {
+        if let Some(existing) = app.get_webview_window("capture") {
+            let _ = existing.show();
+            let _ = existing.set_focus();
+            return;
+        }
+        let _ = WebviewWindowBuilder::new(
+            app,
+            "capture",
+            WebviewUrl::App("index.html?capture=1".into()),
+        )
         .title("")
         .fullscreen(true)
         .transparent(true)
@@ -27,6 +33,11 @@ pub fn open_capture_overlay(app: &AppHandle) {
         .always_on_top(true)
         .skip_taskbar(true)
         .build();
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        let _ = app;
+    }
 }
 
 fn close_capture_overlay(app: &AppHandle) {
@@ -35,20 +46,20 @@ fn close_capture_overlay(app: &AppHandle) {
     }
 }
 
-/// Capture the selected region (CSS px, relative to the overlay = primary
-/// monitor origin), put it on the clipboard, then trigger the standard
-/// clipboard -> inject flow.
-#[tauri::command]
-pub fn capture_region(
-    app_handle: AppHandle,
-    state: tauri::State<'_, DaemonState>,
+/// Grab the selected region and run the inject flow (Windows / macOS only).
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+fn do_capture(
+    app_handle: &AppHandle,
+    state: &DaemonState,
     x: i32,
     y: i32,
     w: u32,
     h: u32,
 ) -> Result<(), String> {
-    // Close the overlay first so it isn't in the shot; let the OS redraw.
-    close_capture_overlay(&app_handle);
+    use std::borrow::Cow;
+    use std::time::Duration;
+
+    // The overlay was just closed; let the OS redraw so it isn't in the shot.
     std::thread::sleep(Duration::from_millis(180));
 
     let monitors = xcap::Monitor::all().map_err(|e| format!("list monitors: {e}"))?;
@@ -79,12 +90,32 @@ pub fn capture_region(
     })
     .map_err(|e| format!("set clipboard image: {e}"))?;
 
-    // Reuse the standard clipboard -> compress/route/upload/inject flow.
-    daemon::trigger_capture_and_paste(&app_handle, state.inner());
+    daemon::trigger_capture_and_paste(app_handle, state);
     Ok(())
 }
 
-/// Cancel the capture (Esc / right-click in the overlay).
+#[tauri::command]
+pub fn capture_region(
+    app_handle: AppHandle,
+    state: tauri::State<'_, DaemonState>,
+    x: i32,
+    y: i32,
+    w: u32,
+    h: u32,
+) -> Result<(), String> {
+    close_capture_overlay(&app_handle);
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    {
+        do_capture(&app_handle, state.inner(), x, y, w, h)
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        let _ = (state, x, y, w, h);
+        Err("Screenshot capture is not supported on this platform".to_string())
+    }
+}
+
+/// Cancel the capture (Esc / tiny selection in the overlay).
 #[tauri::command]
 pub fn cancel_capture(app_handle: AppHandle) -> Result<(), String> {
     close_capture_overlay(&app_handle);
