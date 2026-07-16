@@ -1,10 +1,12 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use tauri::{AppHandle, Emitter};
+use crate::config::AppConfig;
 
 pub struct DaemonState {
     pub running: Arc<Mutex<bool>>,
     pub log_history: Arc<Mutex<Vec<String>>>,
+    pub config: Arc<RwLock<AppConfig>>,
 }
 
 pub fn log_message(app_handle: &AppHandle, log_history: &Arc<Mutex<Vec<String>>>, message: &str) {
@@ -21,18 +23,18 @@ pub fn log_message(app_handle: &AppHandle, log_history: &Arc<Mutex<Vec<String>>>
     let _ = app_handle.emit("log_append", formatted);
 }
 
-pub fn start_daemon(app_handle: AppHandle) -> DaemonState {
+pub fn start_daemon(app_handle: AppHandle, config: AppConfig) -> DaemonState {
     let running = Arc::new(Mutex::new(true));
     let running_clone = running.clone();
     let log_history = Arc::new(Mutex::new(Vec::new()));
     let log_history_clone = log_history.clone();
+    let config_lock = Arc::new(RwLock::new(config));
     let app_clone = app_handle.clone();
     
     thread::spawn(move || {
         log_message(&app_clone, &log_history_clone, "Daemon background thread started.");
         
         loop {
-            // Safe lock evaluation to check if thread should stop
             if let Ok(running) = running_clone.lock() {
                 if !*running {
                     break;
@@ -47,5 +49,5 @@ pub fn start_daemon(app_handle: AppHandle) -> DaemonState {
         log_message(&app_clone, &log_history_clone, "Daemon background thread stopped.");
     });
     
-    DaemonState { running, log_history }
+    DaemonState { running, log_history, config: config_lock }
 }

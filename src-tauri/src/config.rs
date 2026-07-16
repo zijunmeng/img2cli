@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SshConfig {
@@ -29,14 +29,20 @@ pub struct TargetConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
+    #[serde(default)]
+    pub save_dir: Option<PathBuf>,
     #[serde(default = "default_output_format")]
     pub output_format: String,
     #[serde(default = "default_compress_quality")]
     pub compress_quality: u8,
     #[serde(default = "default_max_dimension")]
     pub max_dimension: Option<u32>,
+    #[serde(default)]
+    pub workspace_aware: bool,
     #[serde(default = "default_wrap_single_quotes")]
     pub wrap_single_quotes: bool,
+    
+    // GUI / Daemon settings
     #[serde(default = "default_launch_on_boot")]
     pub launch_on_boot: bool,
     #[serde(default = "default_enable_notifications")]
@@ -49,7 +55,10 @@ pub struct AppConfig {
     pub injection_mode: String,  // "direct" or "swap"
     #[serde(default = "default_clean_keep_days")]
     pub clean_keep_days: u32,
+    
     pub ssh: Option<SshConfig>,
+    #[serde(default)]
+    pub ssh_targets: Option<Vec<SshConfig>>,
     pub targets: Option<Vec<TargetConfig>>,
 }
 
@@ -67,9 +76,11 @@ fn default_clean_keep_days() -> u32 { 1 }
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
+            save_dir: None,
             output_format: default_output_format(),
             compress_quality: default_compress_quality(),
             max_dimension: default_max_dimension(),
+            workspace_aware: false,
             wrap_single_quotes: default_wrap_single_quotes(),
             launch_on_boot: default_launch_on_boot(),
             enable_notifications: default_enable_notifications(),
@@ -85,6 +96,7 @@ impl Default for AppConfig {
                 remote_dir: "/tmp/img2cli".to_string(),
                 match_pattern: None,
             }),
+            ssh_targets: None,
             targets: None,
         }
     }
@@ -106,25 +118,31 @@ impl AppConfig {
         }
     }
 
-    pub fn load() -> Result<Self, String> {
-        let path = Self::config_file_path();
+    pub fn load_from_path(path: &Path) -> Result<Self, String> {
         if !path.exists() {
             return Ok(Self::default());
         }
-        let content = fs::read_to_string(&path)
+        let content = fs::read_to_string(path)
             .map_err(|e| format!("Failed to read config file: {}", e))?;
         toml::from_str(&content)
             .map_err(|e| format!("Failed to parse config file: {}", e))
     }
 
-    pub fn save(&self) -> Result<(), String> {
-        let path = Self::config_file_path();
+    pub fn save_to_path(&self, path: &Path) -> Result<(), String> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)
                 .map_err(|e| format!("Failed to create config directory: {}", e))?;
         }
         let content = toml::to_string_pretty(self).map_err(|e| e.to_string())?;
         fs::write(path, content).map_err(|e| e.to_string())
+    }
+
+    pub fn load() -> Result<Self, String> {
+        Self::load_from_path(&Self::config_file_path())
+    }
+
+    pub fn save(&self) -> Result<(), String> {
+        self.save_to_path(&Self::config_file_path())
     }
 }
 
@@ -156,16 +174,13 @@ mod tests {
         config.compress_quality = 95;
         
         let temp_dir = std::env::temp_dir().join("img2cli_test");
-        let _ = std::fs::create_dir_all(&temp_dir);
         let test_path = temp_dir.join("config.toml");
         
-        // Save
-        let content = toml::to_string_pretty(&config).unwrap();
-        std::fs::write(&test_path, content).unwrap();
+        // Save using real I/O methods
+        config.save_to_path(&test_path).unwrap();
         
-        // Load
-        let read_content = std::fs::read_to_string(&test_path).unwrap();
-        let loaded: AppConfig = toml::from_str(&read_content).unwrap();
+        // Load using real I/O methods
+        let loaded = AppConfig::load_from_path(&test_path).unwrap();
         
         assert_eq!(loaded.output_format, "html");
         assert_eq!(loaded.compress_quality, 95);

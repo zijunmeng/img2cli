@@ -7,13 +7,23 @@ use config::AppConfig;
 use tauri::Manager;
 
 #[tauri::command]
-fn get_config() -> Result<AppConfig, String> {
-    AppConfig::load()
+fn get_config(state: tauri::State<'_, daemon::DaemonState>) -> Result<AppConfig, String> {
+    if let Ok(config) = state.config.read() {
+        Ok(config.clone())
+    } else {
+        Err("Failed to acquire read lock for daemon configuration".to_string())
+    }
 }
 
 #[tauri::command]
-fn save_config(config: AppConfig) -> Result<(), String> {
-    config.save()
+fn save_config(config: AppConfig, state: tauri::State<'_, daemon::DaemonState>) -> Result<(), String> {
+    config.save()?;
+    if let Ok(mut daemon_config) = state.config.write() {
+        *daemon_config = config;
+        Ok(())
+    } else {
+        Err("Failed to acquire write lock for daemon configuration".to_string())
+    }
 }
 
 #[tauri::command]
@@ -102,15 +112,31 @@ fn main() {
             if !path.exists() {
                 let config = AppConfig::default();
                 let _ = config.save();
-            } else {
-                if let Err(e) = AppConfig::load() {
+            }
+            
+            let initial_config = match AppConfig::load() {
+                Ok(c) => c,
+                Err(e) => {
                     eprintln!("Configuration load error: {}", e);
-                    // Do NOT call save() here to prevent wiping the corrupted file
+                    // App will fallback to default config in memory, but we keep the corrupt file intact
+                    AppConfig::default()
+                }
+            };
+            
+            // Start the daemon thread and manage its lifecycle state
+            let daemon_state = daemon::start_daemon(app.handle().clone(), initial_config);
+            
+            // Route startup error logs through the daemon logging system if loading failed
+            if path.exists() {
+                if let Err(e) = AppConfig::load() {
+                    daemon::log_message(
+                        &app.handle(),
+                        &daemon_state.log_history,
+                        &format!("Configuration load error: {}", e),
+                    );
                 }
             }
             
-            // Start the daemon thread and manage its lifecycle state
-            let daemon_state = daemon::start_daemon(app.handle().clone());
             app.manage(daemon_state);
             
             let window = app.get_webview_window("main").unwrap();
