@@ -92,12 +92,18 @@ impl Config {
     }
 
     pub fn config_file_path() -> PathBuf {
-        let base_dir = if cfg!(windows) {
-            std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\".to_string())
+        if cfg!(windows) {
+            let appdata = std::env::var("APPDATA")
+                .unwrap_or_else(|_| {
+                    std::env::var("USERPROFILE")
+                        .map(|h| format!("{}\\AppData\\Roaming", h))
+                        .unwrap_or_else(|_| "C:\\".to_string())
+                });
+            PathBuf::from(appdata).join("img2cli").join("config.toml")
         } else {
-            std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string())
-        };
-        PathBuf::from(base_dir).join(".config").join("img2cli").join("config.toml")
+            let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+            PathBuf::from(home).join(".config").join("img2cli").join("config.toml")
+        }
     }
 
     pub fn get_save_dir(&self) -> PathBuf {

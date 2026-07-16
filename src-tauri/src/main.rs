@@ -8,7 +8,7 @@ use tauri::Manager;
 
 #[tauri::command]
 fn get_config() -> Result<AppConfig, String> {
-    Ok(AppConfig::load())
+    AppConfig::load()
 }
 
 #[tauri::command]
@@ -17,11 +17,33 @@ fn save_config(config: AppConfig) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn get_log_history(state: tauri::State<'_, daemon::DaemonState>) -> Result<Vec<String>, String> {
+    if let Ok(history) = state.log_history.lock() {
+        Ok(history.clone())
+    } else {
+        Err("Failed to acquire log history lock".to_string())
+    }
+}
+
+#[tauri::command]
 async fn test_connection(
     host: String,
     port: Option<u16>,
     username: Option<String>,
 ) -> Result<String, String> {
+    // 1. Sanitize inputs to prevent SSH option injection vulnerabilities
+    let host_trimmed = host.trim();
+    if host_trimmed.starts_with('-') {
+        return Err("Invalid host: host name cannot start with a hyphen".to_string());
+    }
+    
+    if let Some(ref user) = username {
+        let user_trimmed = user.trim();
+        if user_trimmed.starts_with('-') {
+            return Err("Invalid username: username cannot start with a hyphen".to_string());
+        }
+    }
+
     use std::process::Command;
     let mut args = Vec::new();
     if let Some(p) = port {
@@ -34,14 +56,18 @@ async fn test_connection(
     args.push("-o".to_string());
     args.push("BatchMode=yes".to_string());
     
-    let dest = if let Some(user) = username {
-        if user.is_empty() {
-            host
+    // Use -- to separate options from host argument
+    args.push("--".to_string());
+    
+    let dest = if let Some(ref user) = username {
+        let user_trimmed = user.trim();
+        if user_trimmed.is_empty() {
+            host_trimmed.to_string()
         } else {
-            format!("{}@{}", user, host)
+            format!("{}@{}", user_trimmed, host_trimmed)
         }
     } else {
-        host
+        host_trimmed.to_string()
     };
     args.push(dest);
     args.push("echo 'SUCCESS'".to_string());
@@ -71,11 +97,16 @@ fn main() {
         ))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
-            // Ensure configuration exists without overwriting corrupt files destructively
+            // Ensure configuration exists safely without destructive overwriting on syntax errors
             let path = AppConfig::config_file_path();
             if !path.exists() {
                 let config = AppConfig::default();
                 let _ = config.save();
+            } else {
+                if let Err(e) = AppConfig::load() {
+                    eprintln!("Configuration load error: {}", e);
+                    // Do NOT call save() here to prevent wiping the corrupted file
+                }
             }
             
             // Start the daemon thread and manage its lifecycle state
@@ -89,6 +120,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             get_config,
             save_config,
+            get_log_history,
             test_connection
         ])
         .build(tauri::generate_context!())

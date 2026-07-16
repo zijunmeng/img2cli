@@ -92,29 +92,36 @@ impl Default for AppConfig {
 
 impl AppConfig {
     pub fn config_file_path() -> PathBuf {
-        let base_dir = if cfg!(windows) {
-            std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\".to_string())
+        if cfg!(windows) {
+            let appdata = std::env::var("APPDATA")
+                .unwrap_or_else(|_| {
+                    std::env::var("USERPROFILE")
+                        .map(|h| format!("{}\\AppData\\Roaming", h))
+                        .unwrap_or_else(|_| "C:\\".to_string())
+                });
+            PathBuf::from(appdata).join("img2cli").join("config.toml")
         } else {
-            std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string())
-        };
-        PathBuf::from(base_dir).join(".config").join("img2cli").join("config.toml")
+            let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+            PathBuf::from(home).join(".config").join("img2cli").join("config.toml")
+        }
     }
 
-    pub fn load() -> Self {
+    pub fn load() -> Result<Self, String> {
         let path = Self::config_file_path();
         if !path.exists() {
-            return Self::default();
+            return Ok(Self::default());
         }
-        match fs::read_to_string(&path) {
-            Ok(content) => toml::from_str(&content).unwrap_or_else(|_| Self::default()),
-            Err(_) => Self::default(),
-        }
+        let content = fs::read_to_string(&path)
+            .map_err(|e| format!("Failed to read config file: {}", e))?;
+        toml::from_str(&content)
+            .map_err(|e| format!("Failed to parse config file: {}", e))
     }
 
     pub fn save(&self) -> Result<(), String> {
         let path = Self::config_file_path();
         if let Some(parent) = path.parent() {
-            let _ = fs::create_dir_all(parent);
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create config directory: {}", e))?;
         }
         let content = toml::to_string_pretty(self).map_err(|e| e.to_string())?;
         fs::write(path, content).map_err(|e| e.to_string())
