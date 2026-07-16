@@ -18,10 +18,10 @@ Get the latest build from [GitHub Releases](https://github.com/zijunmeng/img2cli
 
 | OS | Asset |
 |---|---|
-| Windows (installer) | `img2cli_0.3.3_x64-setup.exe` / `img2cli_0.3.3_x64_en-US.msi` |
-| Windows (portable, no install) | `img2cli-v0.3.3-windows-portable.zip` |
-| macOS (universal) | `img2cli_0.3.3_universal.dmg` |
-| Linux | `img2cli_0.3.3_amd64.deb` / `.rpm` / `.AppImage` |
+| Windows (installer) | `img2cli_0.3.4_x64-setup.exe` / `img2cli_0.3.4_x64_en-US.msi` |
+| Windows (portable, no install) | `img2cli-v0.3.4-windows-portable.zip` |
+| macOS (universal) | `img2cli_0.3.4_universal.dmg` |
+| Linux | `img2cli_0.3.4_amd64.deb` / `.rpm` / `.AppImage` |
 
 > ⚠️ The binaries are currently **unsigned**. On first launch, Windows SmartScreen (and some antiviruses like 360) may warn — click *More info → Run anyway*, or add the app to your trust list. Code-signing is on the roadmap.
 
@@ -39,6 +39,7 @@ Get the latest build from [GitHub Releases](https://github.com/zijunmeng/img2cli
 - **Password OR key login** — passwords are stored in the **OS keyring** (Windows Credential Manager / macOS Keychain / Linux Secret Service), Xshell-style; key-based servers keep using your SSH keys.
 - **Load OpenSSH config** — import hosts from `~/.ssh/config` (or any file, via the Browse… picker) into your router targets.
 - **Clipboard-preserving injection** — `direct` (native keystroke, default) or `swap` (quick clipboard swap) modes.
+- **Built-in region screenshot** — a dedicated, configurable hotkey (default `Alt+Shift+S`) opens a drag-to-select overlay (Snipaste-style), so you don't need external screenshot tools.
 - **Configurable** — output format (Markdown / HTML / raw / base64), compression quality, max dimension, **press-to-record global hotkey**, launch-on-boot, notifications.
 - **Windows:** "Restart as Administrator" tray option to inject into terminals that run elevated (UIPI).
 

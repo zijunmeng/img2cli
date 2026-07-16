@@ -18,10 +18,10 @@
 
 | 系统 | 文件 |
 |---|---|
-| Windows（安装版） | `img2cli_0.3.3_x64-setup.exe` / `img2cli_0.3.3_x64_en-US.msi` |
-| Windows（免安装便携版） | `img2cli-v0.3.3-windows-portable.zip` |
-| macOS（通用版） | `img2cli_0.3.3_universal.dmg` |
-| Linux | `img2cli_0.3.3_amd64.deb` / `.rpm` / `.AppImage` |
+| Windows（安装版） | `img2cli_0.3.4_x64-setup.exe` / `img2cli_0.3.4_x64_en-US.msi` |
+| Windows（免安装便携版） | `img2cli-v0.3.4-windows-portable.zip` |
+| macOS（通用版） | `img2cli_0.3.4_universal.dmg` |
+| Linux | `img2cli_0.3.4_amd64.deb` / `.rpm` / `.AppImage` |
 
 > ⚠️ 目前二进制**未签名**。首次启动时 Windows SmartScreen（以及 360 等部分杀软）可能拦截 —— 点 *更多信息 → 仍要运行*，或把程序加入信任区即可。代码签名已在规划中。
 
@@ -39,6 +39,7 @@
 - **密码 或 密钥登录** —— 密码存在**系统钥匙串**（Windows 凭据管理器 / macOS 钥匙串 / Linux Secret Service），和 Xshell 一样；密钥服务器继续用你的 SSH key。
 - **加载 OpenSSH 配置** —— 可从 `~/.ssh/config`（或通过"浏览…"任意文件）导入主机到路由目标。
 - **不抢剪贴板的注入** —— `direct`（原生键入，默认）或 `swap`（快速剪贴板置换）模式。
+- **内置区域截图** —— 专用可配置热键（默认 `Alt+Shift+S`）打开拖拽选区覆盖层（Snipaste 风格），无需第三方截图工具。
 - **可配置** —— 输出格式（Markdown / HTML / 原始路径 / base64）、压缩质量、最大尺寸、**按键录制式全局热键**、开机自启、通知。
 - **Windows：** 托盘"以管理员身份重启"选项，可注入到以管理员权限运行的终端（绕过 UIPI 限制）。
 

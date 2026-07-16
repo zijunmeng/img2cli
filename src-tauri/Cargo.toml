@@ -1,6 +1,6 @@
 [package]
 name = "img2cli"
-version = "0.3.3"
+version = "0.3.4"
 edition = "2021"
 
 [dependencies]
@@ -19,6 +19,7 @@ image = { version = "0.25.2", default-features = false, features = ["png", "jpeg
 log = "0.4"
 russh = "0.51"
 russh-sftp = "2.1"
+xcap = "0.5"
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "net", "io-util", "time"] }
 
 [build-dependencies]

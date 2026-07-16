@@ -2,6 +2,7 @@
 
 mod config;
 mod clipboard;
+mod capture;
 mod daemon;
 mod injector;
 mod ssh;
@@ -30,11 +31,11 @@ fn save_config(
     use std::str::FromStr;
     use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
-    // Read old hotkey value to check for changes
-    let old_hotkey = if let Ok(c) = state.config.read() {
-        c.global_hotkey.clone()
+    // Read old hotkey values to check for changes
+    let (old_hotkey, old_shot) = if let Ok(c) = state.config.read() {
+        (c.global_hotkey.clone(), c.screenshot_hotkey.clone())
     } else {
-        "".to_string()
+        ("".to_string(), "".to_string())
     };
 
     config.save()?;
@@ -79,6 +80,22 @@ fn save_config(
             }
             daemon::log_message(&app_handle, &state.log_history, &format!("Warning: Invalid global hotkey: {}", config.global_hotkey));
             return Err("Invalid global hotkey format".to_string());
+        }
+    }
+
+    // Re-register the screenshot hotkey if it changed
+    if old_shot != config.screenshot_hotkey {
+        let manager = app_handle.global_shortcut();
+        if let Ok(old_s) = tauri_plugin_global_shortcut::Shortcut::from_str(&old_shot) {
+            let _ = manager.unregister(old_s);
+        }
+        match tauri_plugin_global_shortcut::Shortcut::from_str(&config.screenshot_hotkey) {
+            Ok(new_s) => {
+                if manager.register(new_s).is_ok() {
+                    daemon::log_message(&app_handle, &state.log_history, &format!("Registered screenshot shortcut: {}", config.screenshot_hotkey));
+                }
+            }
+            Err(_) => daemon::log_message(&app_handle, &state.log_history, &format!("Warning: Invalid screenshot hotkey: {}", config.screenshot_hotkey)),
         }
     }
 
@@ -275,16 +292,21 @@ fn main() {
             .with_handler(|app_handle, shortcut, event| {
                 if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
                     if let Some(state) = app_handle.try_state::<daemon::DaemonState>() {
-                        // Check if the triggered shortcut matches our configured shortcut
-                        let configured_hotkey = if let Ok(cfg) = state.config.read() {
-                            cfg.global_hotkey.clone()
+                        let (cfg_hotkey, cfg_shot) = if let Ok(cfg) = state.config.read() {
+                            (cfg.global_hotkey.clone(), cfg.screenshot_hotkey.clone())
                         } else {
-                            "".to_string()
+                            (String::new(), String::new())
                         };
                         use std::str::FromStr;
-                        if let Ok(configured_shortcut) = tauri_plugin_global_shortcut::Shortcut::from_str(&configured_hotkey) {
-                            if shortcut == &configured_shortcut {
+                        if let Ok(cs) = tauri_plugin_global_shortcut::Shortcut::from_str(&cfg_hotkey) {
+                            if shortcut == &cs {
                                 daemon::trigger_capture_and_paste(app_handle, &state);
+                                return;
+                            }
+                        }
+                        if let Ok(ss) = tauri_plugin_global_shortcut::Shortcut::from_str(&cfg_shot) {
+                            if shortcut == &ss {
+                                capture::open_capture_overlay(app_handle);
                             }
                         }
                     }
@@ -294,9 +316,12 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                // Intercept close events to hide the Settings window instead of exiting
-                api.prevent_close();
-                let _ = window.hide();
+                // Only the main Settings window hides-to-tray; the capture
+                // overlay (label "capture") is allowed to close normally.
+                if window.label() == "main" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
             }
         })
         .setup(|app| {
@@ -332,6 +357,10 @@ fn main() {
                     &daemon_state.log_history,
                     &format!("Warning: Invalid initial global hotkey: {}", initial_config.global_hotkey),
                 );
+            }
+            // Register the screenshot (region-capture) hotkey
+            if let Ok(shot) = tauri_plugin_global_shortcut::Shortcut::from_str(&initial_config.screenshot_hotkey) {
+                let _ = app.handle().global_shortcut().register(shot);
             }
 
             // Route startup load error log if present
@@ -397,7 +426,9 @@ fn main() {
             load_ssh_config,
             set_ssh_password,
             clear_ssh_password,
-            has_ssh_password
+            has_ssh_password,
+            capture::capture_region,
+            capture::cancel_capture
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

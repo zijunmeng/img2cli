@@ -1,6 +1,6 @@
 {
   "productName": "img2cli",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "identifier": "com.img2cli.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -22,7 +22,8 @@
     ],
     "security": {
       "csp": null
-    }
+    },
+    "macOSPrivateApi": true
   },
   "bundle": {
     "active": true,

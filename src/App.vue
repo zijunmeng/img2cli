@@ -1,5 +1,10 @@
 <template>
-  <div class="relative flex h-screen text-slate-100 font-sans overflow-hidden bg-[#0a0b1e]">
+  <!-- Region-capture overlay (screenshot hotkey opens index.html?capture=1) -->
+  <div v-if="captureMode" class="fixed inset-0 z-[9999] cursor-crosshair select-none" style="background: rgba(0,0,0,0.28)" @mousedown="capDown" @mousemove="capMove" @mouseup="capUp">
+    <div class="absolute top-5 left-1/2 -translate-x-1/2 text-white text-sm bg-black/70 px-4 py-1.5 rounded-full pointer-events-none shadow-lg">Drag to select a region · Esc to cancel</div>
+    <div v-if="cap.active" :style="capRectStyle" class="absolute border-2 border-orange-400 pointer-events-none" style="background: rgba(249,115,22,0.12); box-shadow: 0 0 0 9999px rgba(0,0,0,0.4)"></div>
+  </div>
+  <div v-else class="relative flex h-screen text-slate-100 font-sans overflow-hidden bg-[#0a0b1e]">
     <!-- Ambient background glows (give the frosted glass something to blur) -->
     <div class="pointer-events-none absolute inset-0 z-0 overflow-hidden">
       <div class="absolute -bottom-32 -left-24 w-[30rem] h-[30rem] rounded-full bg-orange-600/20 blur-[120px]"></div>
@@ -104,6 +109,10 @@
               <div>
                 <label class="block text-xs font-semibold text-slate-400 mb-1">Global Hotkey <span class="text-slate-600 normal-case font-normal">(click & press keys)</span></label>
                 <input type="text" readonly :value="recordingHotkey ? 'Press a key combo… (Esc to cancel)' : config.global_hotkey" @focus="recordingHotkey = true" @blur="recordingHotkey = false" @keydown="recordHotkeyKeydown" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200 font-mono cursor-pointer" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1">Screenshot Hotkey <span class="text-slate-600 normal-case font-normal">(region capture)</span></label>
+                <input type="text" readonly :value="recordingShot ? 'Press a key combo… (Esc to cancel)' : config.screenshot_hotkey" @focus="recordingShot = true" @blur="recordingShot = false" @keydown="recordShotKeydown" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200 font-mono cursor-pointer" />
               </div>
 
               <div>
@@ -464,6 +473,7 @@ const config = ref({
   launch_on_boot: true,
   enable_notifications: true,
   global_hotkey: 'Alt+V',
+  screenshot_hotkey: 'Alt+Shift+S',
   upload_strategy: 'eager',
   injection_mode: 'direct',
   clean_keep_days: 1,
@@ -712,6 +722,43 @@ const recordHotkeyKeydown = (e) => {
   // stay armed while focused: press another combo to change again; Esc or click away to finish
 };
 
+// ---- Screenshot (region-capture) hotkey recorder ----
+const recordingShot = ref(false);
+const recordShotKeydown = (e) => {
+  if (!recordingShot.value) return;
+  e.preventDefault();
+  if (e.key === 'Escape') { e.target.blur(); return; }
+  if (['Alt', 'Control', 'Shift', 'Meta'].includes(e.key)) return;
+  const mods = [];
+  if (e.altKey) mods.push('Alt');
+  if (e.ctrlKey) mods.push('Control');
+  if (e.shiftKey) mods.push('Shift');
+  if (e.metaKey) mods.push('Super');
+  let key = e.key.length === 1 ? e.key.toUpperCase() : (e.key === ' ' ? 'Space' : e.key);
+  config.value.screenshot_hotkey = [...mods, key].join('+');
+};
+
+// ---- Region-capture overlay (the ?capture=1 window) ----
+const captureMode = ref(false);
+const cap = ref({ active: false, x0: 0, y0: 0, x1: 0, y1: 0 });
+const capRectStyle = computed(() => ({
+  left: Math.min(cap.value.x0, cap.value.x1) + 'px',
+  top: Math.min(cap.value.y0, cap.value.y1) + 'px',
+  width: Math.abs(cap.value.x1 - cap.value.x0) + 'px',
+  height: Math.abs(cap.value.y1 - cap.value.y0) + 'px'
+}));
+const capDown = (e) => { cap.value = { active: true, x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY }; };
+const capMove = (e) => { if (cap.value.active) { cap.value.x1 = e.clientX; cap.value.y1 = e.clientY; } };
+const capUp = async (e) => {
+  cap.value.active = false;
+  const x = Math.round(Math.min(cap.value.x0, e.clientX));
+  const y = Math.round(Math.min(cap.value.y0, e.clientY));
+  const w = Math.round(Math.abs(e.clientX - cap.value.x0));
+  const h = Math.round(Math.abs(e.clientY - cap.value.y0));
+  if (w < 4 || h < 4) { try { await invoke('cancel_capture'); } catch (_) {} return; }
+  try { await invoke('capture_region', { x, y, w, h }); } catch (_) { try { await invoke('cancel_capture'); } catch (_) {} }
+};
+
 // Clear stored SSH passwords from the OS keyring.
 const clearDefaultPassword = async () => {
   if (!config.value.ssh) return;
@@ -833,6 +880,13 @@ const scrollLogsToBottom = () => {
 };
 
 onMounted(() => {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('capture') === '1') {
+    // This webview is the region-capture overlay (loaded by the screenshot hotkey).
+    captureMode.value = true;
+    window.addEventListener('keydown', (e) => { if (e.key === 'Escape') invoke('cancel_capture'); });
+    return;
+  }
   loadConfig();
   setupLogs();
 });
