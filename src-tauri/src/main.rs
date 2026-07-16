@@ -177,7 +177,6 @@ fn load_ssh_config() -> Result<Vec<ssh_config::SshHostEntry>, String> {
 #[cfg(windows)]
 fn restart_as_admin(app: &tauri::AppHandle) {
     use std::os::windows::ffi::OsStrExt;
-    use windows_sys::core::PCWSTR;
     use windows_sys::Win32::UI::Shell::ShellExecuteW;
     use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
@@ -195,11 +194,11 @@ fn restart_as_admin(app: &tauri::AppHandle) {
     // A return value <= 32 means failure (e.g. the user declined the UAC prompt).
     let hinst = unsafe {
         ShellExecuteW(
-            0,
-            PCWSTR(verb.as_ptr()),
-            PCWSTR(file.as_ptr()),
-            PCWSTR(std::ptr::null::<u16>()),
-            PCWSTR(std::ptr::null::<u16>()),
+            std::ptr::null_mut(),
+            verb.as_ptr(),
+            file.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
             SW_SHOWNORMAL,
         )
     };
