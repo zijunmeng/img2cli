@@ -255,11 +255,11 @@
               <table class="w-full text-left border-collapse">
                 <thead>
                   <tr class="border-b border-slate-850 text-xs font-semibold text-slate-500">
-                    <th class="py-3 px-4">Status</th>
-                    <th class="py-3 px-4">Match Pattern</th>
-                    <th class="py-3 px-4">Type</th>
-                    <th class="py-3 px-4">Details</th>
-                    <th class="py-3 px-4 text-right">Actions</th>
+                    <th class="py-3 px-4 text-center">Status</th>
+                    <th class="py-3 px-4 text-center">Match Pattern</th>
+                    <th class="py-3 px-4 text-center">Type</th>
+                    <th class="py-3 px-4 text-center">Details</th>
+                    <th class="py-3 px-4 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-800/40 text-sm">
@@ -281,7 +281,7 @@
                       <span v-else>{{ target.local_dir }}</span>
                     </td>
                     <td class="py-3 px-4">
-                      <div class="flex items-center justify-end gap-1.5 flex-wrap">
+                      <div class="flex items-center justify-center gap-1.5">
                         <button v-if="target.type === 'ssh'" @click="setAsDefault(idx)" class="px-2 py-1 rounded-md text-xs font-semibold bg-orange-500/10 text-orange-400 border border-orange-500/25 hover:bg-orange-500/20 transition-colors">Set Default</button>
                         <button @click="editTarget(idx)" class="px-2 py-1 rounded-md text-xs font-semibold bg-slate-400/10 text-slate-300 border border-slate-400/25 hover:bg-slate-400/20 transition-colors">Edit</button>
                         <button @click="deleteTarget(idx)" class="px-2 py-1 rounded-md text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/25 hover:bg-red-500/20 transition-colors">Delete</button>
@@ -390,7 +390,7 @@
         <h3 class="text-lg font-bold text-white">Load OpenSSH config</h3>
         <div class="flex items-center gap-2">
           <input type="text" v-model="sshConfigPath" placeholder="~/.ssh/config" class="flex-1 bg-slate-950/60 border border-white/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200 font-mono" />
-          <button @click="browseSshConfig" :disabled="loadingSsh" class="bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 font-semibold px-3 py-2 rounded-xl text-xs disabled:opacity-50 whitespace-nowrap">浏览…</button>
+          <button @click="browseSshConfig" :disabled="loadingSsh" class="bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 font-semibold px-3 py-2 rounded-xl text-xs disabled:opacity-50 whitespace-nowrap">Browse…</button>
           <button @click="openSshLoader" :disabled="loadingSsh" class="bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 font-semibold px-3 py-2 rounded-xl text-xs disabled:opacity-50 whitespace-nowrap">Load</button>
         </div>
         <input type="text" v-model="sshSearch" placeholder="Search hosts (alias / host / user)..." class="w-full bg-slate-950/60 border border-white/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200" />
