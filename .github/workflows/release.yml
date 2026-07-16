@@ -52,3 +52,31 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.platform == 'macos-latest' && '--target universal-apple-darwin' || '' }}
+
+      # Step to package portable standalone binaries into zip files (similar to wispterm)
+      - name: Package Portable Binary (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path src-tauri/target/release/img2cli.exe -DestinationPath src-tauri/target/release/img2cli-${{ github.ref_name }}-windows-amd64.zip
+
+      - name: Package Portable Binary (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          tar -czf src-tauri/target/release/img2cli-${{ github.ref_name }}-linux-amd64.tar.gz -C src-tauri/target/release img2cli
+
+      - name: Package Portable Binary (macOS)
+        if: matrix.platform == 'macos-latest'
+        run: |
+          zip -j src-tauri/target/universal-apple-darwin/release/img2cli-${{ github.ref_name }}-macos-universal.zip src-tauri/target/universal-apple-darwin/release/img2cli
+
+      # Upload portable zips to the release
+      - name: Upload Portable Zip to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            src-tauri/target/release/*.zip
+            src-tauri/target/release/*.tar.gz
+            src-tauri/target/universal-apple-darwin/release/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
