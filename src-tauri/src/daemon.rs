@@ -390,8 +390,17 @@ pub fn trigger_capture_and_paste(app_handle: &AppHandle, state: &DaemonState) {
                 
                 // 6. Perform copy/upload operations
                 let paste_text = if let Some(ssh) = scp_upload_ssh {
-                    log_message(&app_handle_clone, &log_history_clone, &format!("Uploading via SCP to {}...", ssh.host));
-                    match upload_via_scp(&local_dest, &ssh) {
+                    let user = ssh.username.clone().unwrap_or_default();
+                    let identity = crate::ssh::identity_key(&user, &ssh.host, ssh.port);
+                    let port = ssh.port.unwrap_or(22);
+                    let remote_result = if let Some(pw) = crate::ssh::get_stored_password(&identity) {
+                        log_message(&app_handle_clone, &log_history_clone, &format!("Uploading via SFTP (password) to {}...", ssh.host));
+                        crate::ssh::upload_via_sftp(&ssh.host, port, &user, &pw, &ssh.remote_dir, &local_dest)
+                    } else {
+                        log_message(&app_handle_clone, &log_history_clone, &format!("Uploading via SCP (key) to {}...", ssh.host));
+                        upload_via_scp(&local_dest, &ssh)
+                    };
+                    match remote_result {
                         Ok(remote_path) => {
                             let base_format = match config_clone.output_format.to_lowercase().as_str() {
                                 "markdown" => format!("![image]({})", remote_path),
@@ -405,7 +414,7 @@ pub fn trigger_capture_and_paste(app_handle: &AppHandle, state: &DaemonState) {
                             }
                         }
                         Err(e) => {
-                            let err_msg = format!("SCP upload failed: {}", e);
+                            let err_msg = format!("Upload failed: {}", e);
                             log_message(&app_handle_clone, &log_history_clone, &err_msg);
                             return;
                         }

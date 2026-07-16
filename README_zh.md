@@ -2,148 +2,78 @@
 
 [English](./README.md) | 简体中文
 
-`img2cli` 是一个使用 Rust 编写的快速、轻量、跨平台的命令行实用工具。它允许您直接将本地系统剪贴板中的截图自动上传并转换为文件路径文本（特别适用于通过 SSH 远程运行的多模态 AI Agent 终端工具，如 `agy cli`）。
+把截图以 Markdown 图片链接的形式粘贴进任何 AI CLI —— **而且不破坏你剪贴板里的图片。**
 
-## 工作原理
+`img2cli` 是一个跨平台的**系统托盘桌面应用**（Rust + Tauri + Vue 3），为多模态 AI 工作流而生。截图 → 聚焦到终端 → 按 **Alt+V**，图片的 Markdown 路径就会被"敲"进你的终端；而图片本身仍留在剪贴板里，所以你照样能用 **Ctrl+V** 把原图贴进微信 / Word / 飞书。
 
-当工具在后台运行时，您在本地复制一张图片（例如使用 Snipaste 等截图工具）会**自动触发**以下操作：
-1. 从系统剪贴板中读取截图数据。
-2. 对图片进行压缩和尺寸优化（如自动调整大小并转为 JPEG），以节省网络上传时间和 API Token 消耗。
-3. 将图片保存在本地。
-4. 如果启用了远程上传，它会自动通过 `scp` 将图片传输到您的远程 Linux 服务器。
-5. 自动格式化输出路径（如：绝对路径、Markdown 图片链接或 HTML 标签）。
-6. 将格式化后的远程文件路径文本**写回您的系统剪贴板**，并发送气泡通知。
-7. 您只需在终端中按下粘贴键（`Ctrl+V`、`Shift+Insert` 或鼠标右键），即可直接键入路径！
+## 为什么需要它
 
-## 安装方式
+通过 SSH 远程运行的多模态 AI CLI（Claude Code、Cursor、Gemini CLI 等）**接收不了粘贴的图片**，它们只认**文本路径**。img2cli 就是来补这个缺口的：读取剪贴板里的截图，上传到你终端所连的服务器（或存到本地），再把路径以 `![image](...)` 注入进去。
 
-### 方式 A：直接下载预编译二进制包（推荐）
+它是**不抢剪贴板**的：默认 `direct`（直接键入）模式下全程不碰剪贴板，所以同一张截图既能贴聊天软件（Ctrl+V，出图）**也能**喂给终端（Alt+V，出路径）。
 
-您可以直接从本仓库的 **GitHub Releases** 页面下载适用于 **Windows**、**macOS** 和 **Linux** 的预编译好的可执行文件：
+## 下载
 
-*   **Windows**: 下载 `img2cli-windows.exe`。
-*   **Linux**: 下载 `img2cli-linux`（Linux 运行依赖见下方“环境依赖”说明）。
-*   **macOS**: 下载 `img2cli-macos`。
+从 [GitHub Releases](https://github.com/zijunmeng/img2cli/releases) 下载最新版：
 
-### 方式 B：从源码编译
+| 系统 | 文件 |
+|---|---|
+| Windows（安装版） | `img2cli_0.3.0_x64-setup.exe` / `img2cli_0.3.0_x64_en-US.msi` |
+| Windows（免安装便携版） | `img2cli-v0.3.0-windows-portable.zip` |
+| macOS（通用版） | `img2cli_0.3.0_universal.dmg` |
+| Linux | `img2cli_0.3.0_amd64.deb` / `.rpm` / `.AppImage` |
 
-#### 1. 环境依赖 (仅 Linux 需要)
+> ⚠️ 目前二进制**未签名**。首次启动时 Windows SmartScreen（以及 360 等部分杀软）可能拦截 —— 点 *更多信息 → 仍要运行*，或把程序加入信任区即可。代码签名已在规划中。
 
-在 Linux (X11) 上运行，您需要安装 X11 运行库和开发库：
-*   Debian/Ubuntu 系列系统：
-    ```bash
-    sudo apt-get install libx11-dev libxtst-dev libxcb1-dev
-    ```
-*   Fedora/RHEL 系列系统：
-    ```bash
-    sudo dnf install libX11-devel libXtst-devel libxcb-devel
-    ```
+## 工作流程
 
-#### 2. 使用 Cargo 编译
+1. 截图并放入剪贴板（Win+Shift+S、macOS 截图等）。
+2. 把焦点切到运行 AI CLI 的终端。
+3. 按 **Alt+V**。
+4. img2cli 抓取并压缩图片，上传到匹配的服务器（远程目录不存在会自动创建），再把 `![image](/远程/路径.jpg)` **注入**终端。
 
-克隆仓库并使用 Cargo 编译：
+## 功能特性
+
+- **常驻系统托盘**，带毛玻璃风格的设置面板（双击托盘图标打开）。
+- **跨终端自动路由** —— 根据当前窗口标题，结合你的 `~/.ssh/config` 自动识别要上传的 SSH 主机。VS Code、Xshell、MobaXterm、PuTTY、Windows Terminal 等都适用，无需手动配匹配规则。
+- **密码 或 密钥登录** —— 密码存在**系统钥匙串**（Windows 凭据管理器 / macOS 钥匙串 / Linux Secret Service），和 Xshell 一样；密钥服务器继续用你的 SSH key。
+- **加载 OpenSSH 配置** —— 可从 `~/.ssh/config`（或通过"浏览…"任意文件）导入主机到路由目标。
+- **不抢剪贴板的注入** —— `direct`（原生键入，默认）或 `swap`（快速剪贴板置换）模式。
+- **可配置** —— 输出格式（Markdown / HTML / 原始路径 / base64）、压缩质量、最大尺寸、热键、开机自启、通知。
+- **Windows：** 托盘"以管理员身份重启"选项，可注入到以管理员权限运行的终端（绕过 UIPI 限制）。
+
+### 路由优先级
+
+按下 Alt+V 时，上传目标按以下顺序解析：
+
+1. **手动路由目标**（窗口标题匹配显式的 `match_pattern`）
+2. **ssh-config 自动识别**（标题里包含 `~/.ssh/config` 中的主机别名/主机名）
+3. **默认 SSH 主机**（若已启用）
+4. **本地临时路径**（兜底）
+
+## SSH 密码安全
+
+密码**永远不会写进配置文件**。它们加密存储在系统钥匙串里，按主机（`用户@主机:端口`）作为键名，只有当前系统用户能读取 —— 和 Xshell 一样，不是明文。密钥服务器则根本不需要密码。
+
+## 平台说明
+
+- **Windows：** 完整支持（按窗口标题自动路由、以管理员重启）。
+- **macOS：** 需授予**辅助功能（Accessibility）**权限（用于全局热键、文字注入、读取窗口标题）。
+- **Linux：** 仅 X11（需安装 `xdotool`）。Wayland 合成器不允许读取其它窗口标题，因此自动路由会回落到默认主机 / 本地路径。
+
+## 配置
+
+设置在 GUI 里编辑，存储于：
+
+- Windows：`%APPDATA%\img2cli\config.toml`
+- macOS / Linux：`~/.config/img2cli/config.toml`
+
+## 从源码构建
+
+需要 Node.js、Rust 以及 [Tauri v2 前置依赖](https://v2.tauri.app/start/prerequisites/)。
 
 ```bash
-cargo build --release
+npm install
+npm run tauri dev      # 开发模式运行
+npm run tauri build    # 生成安装包 / 便携版
 ```
-
----
-
-## Windows 一键快捷配置 (本地连接远程 AI 场景)
-
-如果您在本地 Windows 电脑上截图，并希望自动粘贴到 VS Code SSH 终端或 Xshell 的远程 AI 终端中：
-
-1. 下载本项目文件夹或 Release 压缩包。
-2. 在该项目文件夹下打开 **PowerShell** 窗口。
-3. 运行交互式一键配置脚本：
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File .\setup.ps1
-   ```
-   *（脚本会自动检测/配置本地 Rust 开发环境，为您编译出 `.exe`，随后通过交互提示引导您输入服务器 IP、用户名和自定义端口，自动在远程服务器上帮您生成并配置好 SSH 免密密钥，最后在本地当前目录下生成一个后台启动器 `run_hidden.vbs`。）*
-4. 双击生成的 **`run_hidden.vbs`** 文件，程序即开始在后台完全静默隐形运行。
-
----
-
-## 配置文件说明
-
-配置文件存储路径：
-*   **Windows**: `%USERPROFILE%\.config\img2cli\config.toml`
-*   **Linux/Mac**: `~/.config/img2cli/config.toml`
-
-### 配置项详情
-
-*   `save_dir`: 本地存储临时截图的文件夹（默认：系统临时文件夹下的 `img2cli` 目录，软件每小时会自动清理其中超过 24 小时的旧图）。
-*   `output_format`: 写回剪贴板用于粘贴的文本格式。可选：
-    *   `"raw"`: 绝对路径文本（如 `/tmp/img2cli/img_123.jpg`）。
-    *   `"markdown"`: Markdown 图片链接（如 `![image](/tmp/img2cli/img_123.jpg)`）。
-    *   `"html"`: HTML 图片标签（如 `<img src="/tmp/img2cli/img_123.jpg" />`）。
-    *   `"base64"`: Base64 Data URI 格式（如 `data:image/jpeg;base64,...`）。
-*   `compress_quality`: JPEG 压缩质量，范围 `0` 到 `100`（默认：`80`）。
-*   `max_dimension`: 截图最大允许的分辨率（宽或高）。超过该尺寸的图片会被自动等比例缩放（默认：`1024`）。
-*   `workspace_aware`: 设置为 `true` 时，工具会自动尝试检测当前活跃终端的工作目录并将截图直接存入其下的 `images/` 或 `assets/` 文件夹中并粘贴相对路径（仅 Linux X11 支持，若启用了 SSH 上传则该选项自动失效）。
-
-### `[ssh]` 远程上传配置块
-
-```toml
-[ssh]
-enabled = true                       # 设置为 true 开启截图自动从本地上传到远程服务器
-host = "your-ssh-host-alias-or-ip"   # 远程 SSH 主机 IP 或 ~/.ssh/config 中配置的主机别名
-port = 22                            # 远程 SSH 端口（可选，默认 22，也可以自定义如 7525）
-username = "your-remote-username"    # 远程服务器用户名
-remote_dir = "/tmp/img2cli"          # 图片上传至远程服务器的目标文件夹
-```
-
-### `[[ssh_targets]]` 多服务器自动感知路由（高级）
-
-如果您同时在多个远程服务器上工作（例如在不同的 VS Code SSH 窗口或 Xshell 标签页之间切换），您可以在 `config.toml` 中定义多组服务器路由规则。`img2cli` 会自动获取当前最前端的工作窗口标题，并检查其中是否包含您指定的 `match_pattern`。若匹配成功则自动上传到对应服务器；若均未匹配成功，则自动降级使用默认的 `[ssh]` 配置。
-
-```toml
-# 目标服务器 1：S90 节点
-[[ssh_targets]]
-enabled = true
-match_pattern = "S90"                 # 当工作窗口标题中包含 "S90" 时匹配（不区分大小写）
-host = "172.16.190.90"
-port = 22
-username = "your_username"
-remote_dir = "/s1/SHARE/your_username/tmp/img2cli"
-
-# 目标服务器 2：开发环境
-[[ssh_targets]]
-enabled = true
-match_pattern = "my-dev-box"          # 当工作窗口标题中包含 "my-dev-box" 时匹配
-host = "10.0.0.5"
-port = 2222
-username = "root"
-remote_dir = "/tmp/img2cli"
-```
-
----
-
-## 命令行用法 (Linux/Mac 常用指令)
-
-*   **启动后台守护进程 (Daemon)**:
-    ```bash
-    img2cli start
-    ```
-    此命令会将进程分叉至后台运行，日志输出在 `/tmp/img2cli.out` 和 `/tmp/img2cli.err` 中。
-
-*   **在前台直接运行 (一般用于调试或 Windows 手动运行)**:
-    ```bash
-    img2cli run
-    ```
-
-*   **查看后台守护进程状态**:
-    ```bash
-    img2cli status
-    ```
-
-*   **停止后台守护进程**:
-    ```bash
-    img2cli stop
-    ```
-
-*   **手动清理旧临时文件**:
-    ```bash
-    img2cli clean
-    ```
-    手动删除保存目录下超过 24 小时的截图（后台守护进程默认每隔一小时会自动执行此清理操作）。

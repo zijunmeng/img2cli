@@ -4,6 +4,7 @@ mod config;
 mod clipboard;
 mod daemon;
 mod injector;
+mod ssh;
 mod ssh_config;
 
 use config::AppConfig;
@@ -98,6 +99,7 @@ async fn test_connection(
     host: String,
     port: Option<u16>,
     username: Option<String>,
+    password: Option<String>,
 ) -> Result<String, String> {
     let host_trimmed = host.trim();
     if host_trimmed.is_empty() {
@@ -112,6 +114,29 @@ async fn test_connection(
         if user_trimmed.starts_with('-') {
             return Err("Invalid username: username cannot start with a hyphen".to_string());
         }
+    }
+
+    // Prefer password auth (explicit or from keyring) via the in-process SSH
+    // client; fall back to the system ssh binary (key-based) when no password.
+    let port_val = port.unwrap_or(22);
+    let user_val = username.clone().unwrap_or_default();
+    let identity = crate::ssh::identity_key(&user_val, host_trimmed, Some(port_val));
+    let password = password
+        .map(|p| p.trim().to_string())
+        .filter(|p| !p.is_empty())
+        .or_else(|| crate::ssh::get_stored_password(&identity));
+    if let Some(pw) = password {
+        return match crate::ssh::test_password_async(
+            host_trimmed.to_string(),
+            port_val,
+            user_val,
+            pw,
+        )
+        .await
+        {
+            Ok(()) => Ok("Connection Successful (password).".to_string()),
+            Err(e) => Err(e),
+        };
     }
 
     use std::process::Command;
@@ -156,6 +181,31 @@ async fn test_connection(
             Err(stderr)
         }
     }
+}
+
+#[tauri::command]
+fn set_ssh_password(
+    user: String,
+    host: String,
+    port: Option<u16>,
+    password: String,
+) -> Result<(), String> {
+    let identity = crate::ssh::identity_key(user.trim(), host.trim(), port);
+    if password.is_empty() {
+        crate::ssh::clear_password(&identity)
+    } else {
+        crate::ssh::store_password(&identity, &password)
+    }
+}
+
+#[tauri::command]
+fn clear_ssh_password(
+    user: String,
+    host: String,
+    port: Option<u16>,
+) -> Result<(), String> {
+    let identity = crate::ssh::identity_key(user.trim(), host.trim(), port);
+    crate::ssh::clear_password(&identity)
 }
 
 #[tauri::command]
@@ -338,7 +388,9 @@ fn main() {
             save_config,
             get_log_history,
             test_connection,
-            load_ssh_config
+            load_ssh_config,
+            set_ssh_password,
+            clear_ssh_password
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

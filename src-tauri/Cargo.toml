@@ -17,10 +17,20 @@ rdev = "0.5.3"
 enigo = "0.5.0"
 image = { version = "0.25.2", default-features = false, features = ["png", "jpeg"] }
 log = "0.4"
+russh = "0.51"
+russh-sftp = "2.1"
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "net", "io-util", "time"] }
 
 [build-dependencies]
 tauri-build = "2.0.0"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation", "Win32_UI_Shell"] }
+keyring = { version = "3", default-features = false, features = ["windows-native"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", default-features = false, features = ["apple-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", default-features = false, features = ["sync-secret-service", "crypto-rust"] }
 

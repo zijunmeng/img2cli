@@ -205,6 +205,10 @@
                 <label class="block text-xs font-semibold text-slate-400 mb-1">Remote Copy Destination Folder</label>
                 <input type="text" v-model="config.ssh.remote_dir" :disabled="!config.ssh.enabled" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200 disabled:opacity-50" />
               </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1">Password <span class="text-slate-600 normal-case font-normal">(OS keyring)</span></label>
+                <input type="password" v-model="defaultPassword" :disabled="!config.ssh.enabled" placeholder="blank = use SSH key / saved password" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200 disabled:opacity-50" />
+              </div>
             </div>
 
             <div class="flex justify-end pt-2">
@@ -360,6 +364,10 @@
               <label class="block text-xs font-semibold text-slate-400 mb-1">Remote Copy Destination Folder</label>
               <input type="text" v-model="tempTarget.remote_dir" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200" />
             </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 mb-1">Password <span class="text-slate-600 normal-case font-normal">(OS keyring)</span></label>
+              <input type="password" v-model="tempTarget.password" placeholder="blank = use SSH key / saved password" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200" />
+            </div>
           </div>
 
           <!-- Local Target Fields -->
@@ -474,8 +482,12 @@ const tempTarget = ref({
   port: 22,
   username: '',
   remote_dir: '',
-  local_dir: ''
+  local_dir: '',
+  password: ''
 });
+
+// Password for the default SSH host (stored in OS keyring, NOT in config).
+const defaultPassword = ref('');
 
 // ---- OpenSSH config loader ----
 const sshHosts = ref([]);
@@ -621,6 +633,17 @@ const loadConfig = async () => {
 // Save Configurations
 const saveSettings = async () => {
   try {
+    // Save default SSH password to the OS keyring (if provided), then drop it
+    // so it never lands in config.toml.
+    if (defaultPassword.value && config.value.ssh) {
+      await invoke('set_ssh_password', {
+        user: config.value.ssh.username || '',
+        host: config.value.ssh.host || '',
+        port: config.value.ssh.port || null,
+        password: defaultPassword.value
+      });
+      defaultPassword.value = '';
+    }
     await invoke('save_config', { config: config.value });
     showToast('Settings saved successfully!');
   } catch (err) {
@@ -635,7 +658,8 @@ const checkSSHConnection = async () => {
     const res = await invoke('test_connection', {
       host: config.value.ssh.host,
       port: config.value.ssh.port || null,
-      username: config.value.ssh.username || null
+      username: config.value.ssh.username || null,
+      password: defaultPassword.value || null
     });
     showToast(res);
   } catch (err) {
@@ -649,7 +673,7 @@ const checkSSHConnection = async () => {
 const editTarget = (index) => {
   editingTargetIndex.value = index;
   const target = config.value.targets[index];
-  tempTarget.value = { ...target };
+  tempTarget.value = { ...target, password: '' };
   showAddTargetModal.value = true;
 };
 
@@ -660,18 +684,33 @@ const deleteTarget = (index) => {
 };
 
 // Save Custom Target (add or edit)
-const saveTarget = () => {
+const saveTarget = async () => {
   if (!tempTarget.value.match_pattern.trim()) {
     showToast('Match pattern cannot be empty.', true);
     return;
   }
 
+  // Password is stored in the OS keyring, never in config.toml.
+  const { password, ...targetData } = { ...tempTarget.value };
   if (editingTargetIndex.value !== null) {
-    config.value.targets[editingTargetIndex.value] = { ...tempTarget.value };
+    config.value.targets[editingTargetIndex.value] = targetData;
   } else {
-    config.value.targets.push({ ...tempTarget.value });
+    config.value.targets.push(targetData);
   }
-  
+
+  if (password) {
+    try {
+      await invoke('set_ssh_password', {
+        user: targetData.username || '',
+        host: targetData.host || '',
+        port: targetData.port || null,
+        password
+      });
+    } catch (err) {
+      showToast(`Saved target, but password not stored: ${err}`, true);
+    }
+  }
+
   closeTargetModal();
   showToast('Target updated.');
 };
@@ -688,7 +727,8 @@ const closeTargetModal = () => {
     port: 22,
     username: '',
     remote_dir: '',
-    local_dir: ''
+    local_dir: '',
+    password: ''
   };
 };
 
