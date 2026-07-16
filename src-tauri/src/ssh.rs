@@ -23,6 +23,13 @@ pub fn get_stored_password(identity: &str) -> Option<String> {
         .and_then(|e| e.get_password().ok())
 }
 
+/// Whether a password is stored for an identity (for UI status display).
+pub fn has_stored_password(identity: &str) -> bool {
+    keyring::Entry::new(SERVICE, identity)
+        .map(|e| e.get_password().is_ok())
+        .unwrap_or(false)
+}
+
 /// Store (or overwrite) a password for an identity in the OS keyring.
 pub fn store_password(identity: &str, password: &str) -> Result<(), String> {
     let entry =

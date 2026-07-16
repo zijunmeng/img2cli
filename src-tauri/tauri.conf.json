@@ -1,6 +1,6 @@
 {
   "productName": "img2cli",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "identifier": "com.img2cli.app",
   "build": {
     "beforeDevCommand": "npm run dev",

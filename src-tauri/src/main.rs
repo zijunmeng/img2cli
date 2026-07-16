@@ -209,6 +209,12 @@ fn clear_ssh_password(
 }
 
 #[tauri::command]
+fn has_ssh_password(user: String, host: String, port: Option<u16>) -> bool {
+    let identity = crate::ssh::identity_key(user.trim(), host.trim(), port);
+    crate::ssh::has_stored_password(&identity)
+}
+
+#[tauri::command]
 fn load_ssh_config(path: Option<String>) -> Result<Vec<ssh_config::SshHostEntry>, String> {
     let resolved = ssh_config::resolve_config_path(path.as_deref())
         .ok_or_else(|| "Could not determine home directory".to_string())?;
@@ -390,7 +396,8 @@ fn main() {
             test_connection,
             load_ssh_config,
             set_ssh_password,
-            clear_ssh_password
+            clear_ssh_password,
+            has_ssh_password
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

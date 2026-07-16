@@ -102,8 +102,8 @@
               <h3 class="text-sm font-semibold uppercase text-slate-500 tracking-wider">System Integration</h3>
 
               <div>
-                <label class="block text-xs font-semibold text-slate-400 mb-1">Global Hotkey</label>
-                <input type="text" v-model="config.global_hotkey" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200 font-mono" />
+                <label class="block text-xs font-semibold text-slate-400 mb-1">Global Hotkey <span class="text-slate-600 normal-case font-normal">(click & press keys)</span></label>
+                <input type="text" readonly :value="recordingHotkey ? 'Press a key combo… (Esc to cancel)' : config.global_hotkey" @focus="recordingHotkey = true" @blur="recordingHotkey = false" @keydown="recordHotkeyKeydown" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200 font-mono cursor-pointer" />
               </div>
 
               <div>
@@ -207,7 +207,14 @@
               </div>
               <div>
                 <label class="block text-xs font-semibold text-slate-400 mb-1">Password <span class="text-slate-600 normal-case font-normal">(OS keyring)</span></label>
-                <input type="password" v-model="defaultPassword" :disabled="!config.ssh.enabled" placeholder="blank = use SSH key / saved password" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200 disabled:opacity-50" />
+                <input type="password" v-model="defaultPassword" :disabled="!config.ssh.enabled" :placeholder="defaultHasPassword ? '●●●●●● (saved) — type a new one to update' : 'blank: uses your SSH key (~/.ssh)'" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200 disabled:opacity-50" />
+                <div class="text-[11px] mt-1 flex items-center gap-2">
+                  <template v-if="defaultHasPassword">
+                    <span class="text-emerald-400">✓ Password saved (keyring)</span>
+                    <button type="button" @click="clearDefaultPassword" :disabled="!config.ssh.enabled" class="text-red-400/80 hover:text-red-400 underline disabled:opacity-50">clear</button>
+                  </template>
+                  <span v-else class="text-slate-500">No password → will use your SSH key (~/.ssh)</span>
+                </div>
               </div>
             </div>
 
@@ -251,7 +258,7 @@
             </div>
 
             <!-- Targets Table -->
-            <div class="overflow-x-auto">
+            <div>
               <table class="w-full text-left border-collapse">
                 <thead>
                   <tr class="border-b border-slate-850 text-xs font-semibold text-slate-500">
@@ -276,15 +283,15 @@
                         {{ target.type }}
                       </span>
                     </td>
-                    <td class="py-3 px-4 text-xs text-slate-400">
-                      <span v-if="target.type === 'ssh'">{{ target.username }}@{{ target.host }}:{{ target.remote_dir }}</span>
-                      <span v-else>{{ target.local_dir }}</span>
+                    <td class="py-3 px-4 text-xs text-slate-400 max-w-[16rem]">
+                      <span v-if="target.type === 'ssh'" class="block truncate">{{ target.username }}@{{ target.host }}:{{ target.remote_dir }}</span>
+                      <span v-else class="block truncate">{{ target.local_dir }}</span>
                     </td>
                     <td class="py-3 px-4">
                       <div class="flex items-center justify-center gap-1.5">
-                        <button v-if="target.type === 'ssh'" @click="setAsDefault(idx)" class="px-2 py-1 rounded-md text-xs font-semibold bg-orange-500/10 text-orange-400 border border-orange-500/25 hover:bg-orange-500/20 transition-colors">Set Default</button>
-                        <button @click="editTarget(idx)" class="px-2 py-1 rounded-md text-xs font-semibold bg-slate-400/10 text-slate-300 border border-slate-400/25 hover:bg-slate-400/20 transition-colors">Edit</button>
-                        <button @click="deleteTarget(idx)" class="px-2 py-1 rounded-md text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/25 hover:bg-red-500/20 transition-colors">Delete</button>
+                        <button v-if="target.type === 'ssh'" @click="setAsDefault(idx)" class="px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-orange-500/10 text-orange-400 border border-orange-500/25 hover:bg-orange-500/20 transition-colors">Set Default</button>
+                        <button @click="editTarget(idx)" class="px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-slate-400/10 text-slate-300 border border-slate-400/25 hover:bg-slate-400/20 transition-colors">Edit</button>
+                        <button @click="deleteTarget(idx)" class="px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-red-500/10 text-red-400 border border-red-500/25 hover:bg-red-500/20 transition-colors">Delete</button>
                       </div>
                     </td>
                   </tr>
@@ -366,7 +373,14 @@
             </div>
             <div>
               <label class="block text-xs font-semibold text-slate-400 mb-1">Password <span class="text-slate-600 normal-case font-normal">(OS keyring)</span></label>
-              <input type="password" v-model="tempTarget.password" placeholder="blank = use SSH key / saved password" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200" />
+              <input type="password" v-model="tempTarget.password" :placeholder="tempTargetHasPassword ? '●●●●●● (saved) — type a new one to update' : 'blank: uses your SSH key (~/.ssh)'" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200" />
+              <div class="text-[11px] mt-1 flex items-center gap-2">
+                <template v-if="tempTargetHasPassword">
+                  <span class="text-emerald-400">✓ Password saved (keyring)</span>
+                  <button type="button" @click="clearTargetPassword" class="text-red-400/80 hover:text-red-400 underline">clear</button>
+                </template>
+                <span v-else class="text-slate-500">No password → will use your SSH key (~/.ssh)</span>
+              </div>
             </div>
           </div>
 
@@ -488,6 +502,9 @@ const tempTarget = ref({
 
 // Password for the default SSH host (stored in OS keyring, NOT in config).
 const defaultPassword = ref('');
+const defaultHasPassword = ref(false);
+const tempTargetHasPassword = ref(false);
+const recordingHotkey = ref(false);
 
 // ---- OpenSSH config loader ----
 const sshHosts = ref([]);
@@ -625,6 +642,15 @@ const loadConfig = async () => {
       data.targets = [];
     }
     config.value = data;
+    if (data.ssh && data.ssh.host) {
+      try {
+        defaultHasPassword.value = await invoke('has_ssh_password', {
+          user: data.ssh.username || '',
+          host: data.ssh.host,
+          port: data.ssh.port || null
+        });
+      } catch (_) { /* ignore */ }
+    }
   } catch (err) {
     showToast(`Failed to load configuration: ${err}`, true);
   }
@@ -642,6 +668,7 @@ const saveSettings = async () => {
         port: config.value.ssh.port || null,
         password: defaultPassword.value
       });
+      defaultHasPassword.value = true;
       defaultPassword.value = '';
     }
     await invoke('save_config', { config: config.value });
@@ -669,11 +696,53 @@ const checkSSHConnection = async () => {
   }
 };
 
+// Global hotkey recorder: click the field, then press a key combo.
+const recordHotkeyKeydown = (e) => {
+  if (!recordingHotkey.value) return;
+  e.preventDefault();
+  if (e.key === 'Escape') { recordingHotkey.value = false; return; }
+  if (['Alt', 'Control', 'Shift', 'Meta'].includes(e.key)) return; // wait for a real key
+  const mods = [];
+  if (e.altKey) mods.push('Alt');
+  if (e.ctrlKey) mods.push('Control');
+  if (e.shiftKey) mods.push('Shift');
+  if (e.metaKey) mods.push('Super');
+  let key = e.key.length === 1 ? e.key.toUpperCase() : (e.key === ' ' ? 'Space' : e.key);
+  config.value.global_hotkey = [...mods, key].join('+');
+  recordingHotkey.value = false;
+};
+
+// Clear stored SSH passwords from the OS keyring.
+const clearDefaultPassword = async () => {
+  if (!config.value.ssh) return;
+  try {
+    await invoke('clear_ssh_password', { user: config.value.ssh.username || '', host: config.value.ssh.host || '', port: config.value.ssh.port || null });
+    defaultHasPassword.value = false;
+    defaultPassword.value = '';
+    showToast('Password cleared.');
+  } catch (err) {
+    showToast(`Failed to clear: ${err}`, true);
+  }
+};
+const clearTargetPassword = async () => {
+  try {
+    await invoke('clear_ssh_password', { user: tempTarget.value.username || '', host: tempTarget.value.host || '', port: tempTarget.value.port || null });
+    tempTargetHasPassword.value = false;
+    tempTarget.value.password = '';
+    showToast('Password cleared.');
+  } catch (err) {
+    showToast(`Failed to clear: ${err}`, true);
+  }
+};
+
 // Edit Custom Target
-const editTarget = (index) => {
+const editTarget = async (index) => {
   editingTargetIndex.value = index;
   const target = config.value.targets[index];
   tempTarget.value = { ...target, password: '' };
+  tempTargetHasPassword.value = (target.type === 'ssh')
+    ? await invoke('has_ssh_password', { user: target.username || '', host: target.host || '', port: target.port || null }).catch(() => false)
+    : false;
   showAddTargetModal.value = true;
 };
 
@@ -698,6 +767,7 @@ const saveTarget = async () => {
     config.value.targets.push(targetData);
   }
 
+  let pwStored = false;
   if (password) {
     try {
       await invoke('set_ssh_password', {
@@ -706,13 +776,15 @@ const saveTarget = async () => {
         port: targetData.port || null,
         password
       });
+      tempTargetHasPassword.value = true;
+      pwStored = true;
     } catch (err) {
       showToast(`Saved target, but password not stored: ${err}`, true);
     }
   }
 
   closeTargetModal();
-  showToast('Target updated.');
+  showToast(pwStored ? 'Target saved · password stored in keyring' : 'Target updated.');
 };
 
 // Close modal & reset tempTarget
