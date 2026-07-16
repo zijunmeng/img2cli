@@ -127,7 +127,58 @@ pub fn get_active_window_title() -> Option<String> {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+pub fn get_active_window_title() -> Option<String> {
+    // Requires Accessibility permission for System Events control.
+    let script = r#"tell application "System Events" to get title of front window of (first process whose frontmost is true)"#;
+    let output = std::process::Command::new("osascript")
+        .arg("-e")
+        .arg(script)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let s = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if s.is_empty() {
+        None
+    } else {
+        Some(s)
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub fn get_active_window_title() -> Option<String> {
+    // Works on X11 (requires the `xdotool` binary). Wayland compositors
+    // generally don't expose other apps' window titles, so this returns None.
+    let wid_out = std::process::Command::new("xdotool")
+        .arg("getactivewindow")
+        .output()
+        .ok()?;
+    if !wid_out.status.success() {
+        return None;
+    }
+    let wid = String::from_utf8_lossy(&wid_out.stdout).trim().to_string();
+    if wid.is_empty() {
+        return None;
+    }
+    let name_out = std::process::Command::new("xdotool")
+        .arg("getwindowname")
+        .arg(&wid)
+        .output()
+        .ok()?;
+    if !name_out.status.success() {
+        return None;
+    }
+    let s = String::from_utf8_lossy(&name_out.stdout).trim().to_string();
+    if s.is_empty() {
+        None
+    } else {
+        Some(s)
+    }
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
 pub fn get_active_window_title() -> Option<String> {
     None
 }
@@ -148,6 +199,32 @@ pub fn upload_via_scp(local_path: &Path, ssh: &crate::config::SshConfig) -> Resu
     } else {
         format!("{}:{}", ssh.host, remote_dest)
     };
+
+    // Ensure the remote directory exists so scp doesn't fail on a missing
+    // folder (first run, or a user-supplied path that doesn't exist yet).
+    // Best-effort: ignore errors here and let scp surface any real failure.
+    let ssh_target = if let Some(ref username) = ssh.username {
+        if username.is_empty() {
+            ssh.host.clone()
+        } else {
+            format!("{}@{}", username, ssh.host)
+        }
+    } else {
+        ssh.host.clone()
+    };
+    let mut mkdir_args = Vec::new();
+    if let Some(port) = ssh.port {
+        mkdir_args.push("-p".to_string());
+        mkdir_args.push(port.to_string());
+    }
+    mkdir_args.push("-o".to_string());
+    mkdir_args.push("ConnectTimeout=5".to_string());
+    mkdir_args.push("-o".to_string());
+    mkdir_args.push("BatchMode=yes".to_string());
+    mkdir_args.push("--".to_string());
+    mkdir_args.push(ssh_target);
+    mkdir_args.push(format!("mkdir -p '{}'", ssh.remote_dir));
+    let _ = std::process::Command::new("ssh").args(&mkdir_args).output();
 
     let local_path_str = local_path.to_string_lossy().to_string();
 
@@ -222,16 +299,59 @@ pub fn trigger_capture_and_paste(app_handle: &AppHandle, state: &DaemonState) {
                 
                 log_message(&app_handle_clone, &log_history_clone, &format!("Image saved locally to {:?}", local_dest));
                 
-                // 4. Route matching target based on window title
+                // 4. Route, in priority order:
+                //    (a) manual Dynamic Router Targets (by match_pattern)
+                //    (b) ssh-config auto-detect (title vs ~/.ssh/config hosts)
+                //    (c) default SSH host, then (d) local path (resolved in step 5)
                 let mut active_target = None;
+                let mut auto_detected_ssh: Option<crate::config::SshConfig> = None;
+
                 if let Some(title) = get_active_window_title() {
+                    let title_lower = title.to_lowercase();
                     log_message(&app_handle_clone, &log_history_clone, &format!("Active window title: {:?}", title));
+
+                    // (a) manual targets — explicit user intent, highest priority
                     if let Some(ref targets) = config_clone.targets {
                         for target in targets {
-                            if target.enabled && title.to_lowercase().contains(&target.match_pattern.to_lowercase()) {
+                            if target.enabled
+                                && !target.match_pattern.is_empty()
+                                && title_lower.contains(&target.match_pattern.to_lowercase())
+                            {
                                 log_message(&app_handle_clone, &log_history_clone, &format!("Matched target pattern {:?}", target.match_pattern));
                                 active_target = Some(target.clone());
                                 break;
+                            }
+                        }
+                    }
+
+                    // (b) ssh-config auto-detect: works for any terminal whose
+                    //     title contains the host's alias or hostname (most do).
+                    if active_target.is_none() {
+                        let default_remote = config_clone
+                            .ssh
+                            .as_ref()
+                            .map(|s| s.remote_dir.clone())
+                            .filter(|d| !d.is_empty())
+                            .unwrap_or_else(|| "/tmp/img2cli".to_string());
+                        if let Some(cfg_path) = crate::ssh_config::ssh_config_path() {
+                            if let Ok(content) = std::fs::read_to_string(&cfg_path) {
+                                let hosts = crate::ssh_config::parse_ssh_config(&content);
+                                // pick the most specific match (longest alias/host in title)
+                                let best = hosts.into_iter().filter(|h| {
+                                    (!h.alias.is_empty() && title_lower.contains(&h.alias.to_lowercase()))
+                                        || (!h.host.is_empty() && title_lower.contains(&h.host.to_lowercase()))
+                                }).max_by_key(|h| h.alias.len().max(h.host.len()));
+                                if let Some(h) = best {
+                                    log_message(&app_handle_clone, &log_history_clone, &format!("Auto-detected SSH host from title: {:?}", h.alias));
+                                    auto_detected_ssh = Some(crate::config::SshConfig {
+                                        enabled: true,
+                                        host: h.host,
+                                        port: Some(h.port),
+                                        username: Some(h.username),
+                                        remote_dir: default_remote,
+                                        match_pattern: Some(h.alias),
+                                    });
+                                }
                             }
                         }
                     }
@@ -258,6 +378,9 @@ pub fn trigger_capture_and_paste(app_handle: &AppHandle, state: &DaemonState) {
                         }
                         _ => {}
                     }
+                } else if let Some(ssh) = auto_detected_ssh {
+                    log_message(&app_handle_clone, &log_history_clone, &format!("Auto-routing via ssh-config to {}", ssh.host));
+                    scp_upload_ssh = Some(ssh);
                 } else if let Some(ref default_ssh) = config_clone.ssh {
                     if default_ssh.enabled {
                         log_message(&app_handle_clone, &log_history_clone, "No match found. Falling back to default SSH.");

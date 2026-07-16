@@ -7,7 +7,7 @@
       <div class="absolute -bottom-32 left-1/3 w-[26rem] h-[26rem] rounded-full bg-indigo-600/15 blur-[120px]"></div>
     </div>
     <!-- Sidebar -->
-    <div class="relative z-10 w-64 bg-white/[0.04] backdrop-blur-2xl border-r border-white/10 flex flex-col justify-between shrink-0">
+    <div class="relative z-10 w-64 bg-white/[0.04] backdrop-blur-2xl border-r border-white/10 flex flex-col shrink-0">
       <div>
         <div class="p-6 border-b border-white/10 flex items-center gap-3">
           <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-orange-500 to-amber-500 flex items-center justify-center shadow-lg shadow-orange-500/20">
@@ -52,15 +52,6 @@
             System Logs
           </button>
         </nav>
-      </div>
-
-      <div class="p-4 border-t border-white/10">
-        <button 
-          @click="saveSettings" 
-          class="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white px-4 py-2.5 rounded-xl font-semibold shadow-lg shadow-orange-500/20 active:scale-[0.98] transition-all duration-150 text-sm"
-        >
-          Save Settings
-        </button>
       </div>
     </div>
 
@@ -172,6 +163,12 @@
               </div>
             </div>
           </div>
+
+          <div class="flex justify-end pt-2">
+            <button @click="saveSettings" class="flex items-center gap-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white px-5 py-2.5 rounded-xl font-semibold shadow-lg shadow-orange-500/20 active:scale-[0.98] transition-all duration-150 text-sm">
+              Save Settings
+            </button>
+          </div>
         </div>
 
         <!-- Hosts & Targets Tab -->
@@ -279,10 +276,12 @@
                       <span v-if="target.type === 'ssh'">{{ target.username }}@{{ target.host }}:{{ target.remote_dir }}</span>
                       <span v-else>{{ target.local_dir }}</span>
                     </td>
-                    <td class="py-3 px-4 text-right space-x-2">
-                      <button v-if="target.type === 'ssh'" @click="setAsDefault(idx)" class="text-xs font-semibold text-orange-400/80 hover:text-orange-300 transition-colors">Set Default</button>
-                      <button @click="editTarget(idx)" class="text-xs font-semibold text-slate-400 hover:text-white transition-colors">Edit</button>
-                      <button @click="deleteTarget(idx)" class="text-xs font-semibold text-red-500/80 hover:text-red-400 transition-colors">Delete</button>
+                    <td class="py-3 px-4">
+                      <div class="flex items-center justify-end gap-1.5 flex-wrap">
+                        <button v-if="target.type === 'ssh'" @click="setAsDefault(idx)" class="px-2 py-1 rounded-md text-xs font-semibold bg-orange-500/10 text-orange-400 border border-orange-500/25 hover:bg-orange-500/20 transition-colors">Set Default</button>
+                        <button @click="editTarget(idx)" class="px-2 py-1 rounded-md text-xs font-semibold bg-slate-400/10 text-slate-300 border border-slate-400/25 hover:bg-slate-400/20 transition-colors">Edit</button>
+                        <button @click="deleteTarget(idx)" class="px-2 py-1 rounded-md text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/25 hover:bg-red-500/20 transition-colors">Delete</button>
+                      </div>
                     </td>
                   </tr>
                   <tr v-if="!(config.targets || []).length">
@@ -291,6 +290,12 @@
                 </tbody>
               </table>
             </div>
+          </div>
+
+          <div class="flex justify-end pt-2">
+            <button @click="saveSettings" class="flex items-center gap-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white px-5 py-2.5 rounded-xl font-semibold shadow-lg shadow-orange-500/20 active:scale-[0.98] transition-all duration-150 text-sm">
+              Save Settings
+            </button>
           </div>
         </div>
 
@@ -374,9 +379,11 @@
     <!-- SSH Config Loader Modal -->
     <div v-if="showSshModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
       <div class="bg-white/[0.07] backdrop-blur-2xl border border-white/10 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
-        <div class="flex items-center justify-between">
-          <h3 class="text-lg font-bold text-white">Load OpenSSH config</h3>
-          <span class="text-xs text-slate-400 font-mono">~/.ssh/config</span>
+        <h3 class="text-lg font-bold text-white">Load OpenSSH config</h3>
+        <div class="flex items-center gap-2">
+          <input type="text" v-model="sshConfigPath" placeholder="~/.ssh/config" class="flex-1 bg-slate-950/60 border border-white/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200 font-mono" />
+          <button @click="browseSshConfig" :disabled="loadingSsh" class="bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 font-semibold px-3 py-2 rounded-xl text-xs disabled:opacity-50 whitespace-nowrap">浏览…</button>
+          <button @click="openSshLoader" :disabled="loadingSsh" class="bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 font-semibold px-3 py-2 rounded-xl text-xs disabled:opacity-50 whitespace-nowrap">Load</button>
         </div>
         <input type="text" v-model="sshSearch" placeholder="Search hosts (alias / host / user)..." class="w-full bg-slate-950/60 border border-white/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200" />
         <div class="max-h-72 overflow-y-auto space-y-1 pr-1">
@@ -400,14 +407,17 @@
     </div>
 
     <!-- Notification Toast -->
-    <div v-if="toast.show" :class="['fixed bottom-6 right-6 p-4 rounded-xl shadow-2xl flex items-center gap-3 border z-50 transition-all duration-300 max-w-sm', toast.isError ? 'bg-red-950/90 border-red-800 text-red-200' : 'bg-emerald-950/90 border-emerald-800 text-emerald-200']">
-      <svg v-if="toast.isError" class="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <div v-if="toast.show" :class="['fixed bottom-6 right-6 p-4 pr-3 rounded-xl shadow-2xl flex items-start gap-3 border z-50 transition-all duration-300 max-w-sm', toast.isError ? 'bg-red-950/90 border-red-800 text-red-200' : 'bg-emerald-950/90 border-emerald-800 text-emerald-200']">
+      <svg v-if="toast.isError" class="w-5 h-5 text-red-400 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
       </svg>
-      <svg v-else class="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <svg v-else class="w-5 h-5 text-emerald-400 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
-      <span class="text-sm font-medium leading-relaxed">{{ toast.message }}</span>
+      <span class="text-sm font-medium leading-relaxed flex-1">{{ toast.message }}</span>
+      <button @click="closeToast" class="shrink-0 opacity-60 hover:opacity-100 transition-opacity" aria-label="Dismiss">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+      </button>
     </div>
   </div>
 </template>
@@ -416,6 +426,7 @@
 import { ref, onMounted, nextTick, computed } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
 
 // Active Tab
 const activeTab = ref('general');
@@ -472,6 +483,7 @@ const sshSelected = ref([]); // parallel boolean array (index -> selected)
 const showSshModal = ref(false);
 const sshSearch = ref('');
 const loadingSsh = ref(false);
+const sshConfigPath = ref('~/.ssh/config');
 
 const filteredSshHosts = computed(() => {
   const q = sshSearch.value.trim().toLowerCase();
@@ -491,20 +503,27 @@ const toast = ref({
   isError: false
 });
 
+let toastTimer = null;
 const showToast = (msg, isErr = false) => {
   toast.value.message = msg;
   toast.value.isError = isErr;
   toast.value.show = true;
-  setTimeout(() => {
-    toast.value.show = false;
-  }, 4000);
+  if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
+  // Error/warning toasts stay visible until dismissed; success auto-hides.
+  if (!isErr) {
+    toastTimer = setTimeout(() => { toast.value.show = false; }, 4000);
+  }
+};
+const closeToast = () => {
+  if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
+  toast.value.show = false;
 };
 
 // ---- OpenSSH config loader actions ----
 const openSshLoader = async () => {
   loadingSsh.value = true;
   try {
-    const hosts = await invoke('load_ssh_config');
+    const hosts = await invoke('load_ssh_config', { path: sshConfigPath.value });
     sshHosts.value = hosts || [];
     sshSelected.value = sshHosts.value.map(() => false);
     sshSearch.value = '';
@@ -513,6 +532,23 @@ const openSshLoader = async () => {
     showToast(`Failed to load SSH config: ${err}`, true);
   } finally {
     loadingSsh.value = false;
+  }
+};
+
+const browseSshConfig = async () => {
+  try {
+    const selected = await openDialog({
+      title: 'Select OpenSSH config file',
+      multiple: false,
+      directory: false,
+      filters: [{ name: 'All files', extensions: ['*'] }],
+    });
+    if (typeof selected === 'string') {
+      sshConfigPath.value = selected;
+      await openSshLoader();
+    }
+  } catch (err) {
+    showToast(`Failed to open file dialog: ${err}`, true);
   }
 };
 

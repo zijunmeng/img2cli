@@ -22,6 +22,29 @@ pub fn ssh_config_path() -> Option<PathBuf> {
     home_dir().map(|h| h.join(".ssh").join("config"))
 }
 
+/// Resolve a user-supplied config path: empty/None -> default `~/.ssh/config`,
+/// and expand a leading `~` to the home directory.
+pub fn resolve_config_path(path: Option<&str>) -> Option<PathBuf> {
+    match path.map(str::trim).filter(|p| !p.is_empty()) {
+        Some(p) => Some(expand_tilde(p)),
+        None => ssh_config_path(),
+    }
+}
+
+fn expand_tilde(p: &str) -> PathBuf {
+    if let Some(rest) = p.strip_prefix("~/") {
+        if let Some(home) = home_dir() {
+            return home.join(rest);
+        }
+    }
+    if p == "~" {
+        if let Some(home) = home_dir() {
+            return home;
+        }
+    }
+    PathBuf::from(p)
+}
+
 fn build_entry(alias: &str, props: &HashMap<String, String>, default_user: &str) -> SshHostEntry {
     SshHostEntry {
         host: props

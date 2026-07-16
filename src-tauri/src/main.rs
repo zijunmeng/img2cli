@@ -159,14 +159,14 @@ async fn test_connection(
 }
 
 #[tauri::command]
-fn load_ssh_config() -> Result<Vec<ssh_config::SshHostEntry>, String> {
-    let path = ssh_config::ssh_config_path()
+fn load_ssh_config(path: Option<String>) -> Result<Vec<ssh_config::SshHostEntry>, String> {
+    let resolved = ssh_config::resolve_config_path(path.as_deref())
         .ok_or_else(|| "Could not determine home directory".to_string())?;
-    if !path.exists() {
-        return Err(format!("OpenSSH config not found: {:?}", path));
+    if !resolved.exists() {
+        return Err(format!("SSH config not found: {}", resolved.display()));
     }
-    let content = std::fs::read_to_string(&path)
-        .map_err(|e| format!("Failed to read {:?}: {}", path, e))?;
+    let content = std::fs::read_to_string(&resolved)
+        .map_err(|e| format!("Failed to read {}: {}", resolved.display(), e))?;
     Ok(ssh_config::parse_ssh_config(&content))
 }
 
@@ -235,6 +235,7 @@ fn main() {
                 }
             })
             .build())
+        .plugin(tauri_plugin_dialog::init())
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 // Intercept close events to hide the Settings window instead of exiting
