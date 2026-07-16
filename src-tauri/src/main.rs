@@ -42,20 +42,39 @@ fn save_config(
         return Err("Failed to acquire write lock for daemon configuration".to_string());
     }
 
-    // Dynamic shortcut unregistration & registration updates
+    // Dynamic shortcut unregistration & registration updates with error recovery/rollback
     if old_hotkey != config.global_hotkey {
         let manager = app_handle.global_shortcut();
         
-        if let Ok(old_shortcut) = tauri_plugin_global_shortcut::Shortcut::from_str(&old_hotkey) {
-            let _ = manager.unregister(old_shortcut);
+        let old_shortcut_parsed = tauri_plugin_global_shortcut::Shortcut::from_str(&old_hotkey).ok();
+        let new_shortcut_parsed = tauri_plugin_global_shortcut::Shortcut::from_str(&config.global_hotkey).ok();
+        
+        if let Some(old_s) = old_shortcut_parsed {
+            let _ = manager.unregister(old_s);
         }
         
-        if let Ok(new_shortcut) = tauri_plugin_global_shortcut::Shortcut::from_str(&config.global_hotkey) {
-            if manager.register(new_shortcut).is_ok() {
+        if let Some(new_s) = new_shortcut_parsed {
+            if let Err(e) = manager.register(new_s) {
+                // Rollback: try to restore the old shortcut if the new one failed
+                if let Some(old_s) = old_shortcut_parsed {
+                    let _ = manager.register(old_s);
+                }
+                daemon::log_message(
+                    &app_handle,
+                    &state.log_history,
+                    &format!("Error: Failed to register hotkey '{}': {:?}. Restored old hotkey.", config.global_hotkey, e),
+                );
+                return Err(format!("Failed to register hotkey: {:?}", e));
+            } else {
                 daemon::log_message(&app_handle, &state.log_history, &format!("Registered new global shortcut: {}", config.global_hotkey));
             }
         } else {
+            // Rollback: try to restore the old shortcut if the new one format is invalid
+            if let Some(old_s) = old_shortcut_parsed {
+                let _ = manager.register(old_s);
+            }
             daemon::log_message(&app_handle, &state.log_history, &format!("Warning: Invalid global hotkey: {}", config.global_hotkey));
+            return Err("Invalid global hotkey format".to_string());
         }
     }
 
@@ -143,10 +162,21 @@ fn main() {
             Some(vec![]),
         ))
         .plugin(tauri_plugin_global_shortcut::Builder::new()
-            .with_handler(|app_handle, _shortcut, event| {
+            .with_handler(|app_handle, shortcut, event| {
                 if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
                     if let Some(state) = app_handle.try_state::<daemon::DaemonState>() {
-                        daemon::trigger_capture_and_paste(app_handle, &state);
+                        // Check if the triggered shortcut matches our configured shortcut
+                        let configured_hotkey = if let Ok(cfg) = state.config.read() {
+                            cfg.global_hotkey.clone()
+                        } else {
+                            "".to_string()
+                        };
+                        use std::str::FromStr;
+                        if let Ok(configured_shortcut) = tauri_plugin_global_shortcut::Shortcut::from_str(&configured_hotkey) {
+                            if shortcut == &configured_shortcut {
+                                daemon::trigger_capture_and_paste(app_handle, &state);
+                            }
+                        }
                     }
                 }
             })
