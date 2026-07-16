@@ -2,7 +2,7 @@
 
 ## 1. Goal
 
-Provide a premium, double-click-to-run desktop application for `img2cli` using **Tauri v2** to eliminate manual console compilation and configuration. The program runs natively in the **System Tray** (like Snipaste/OneDrive), manages SSH host profiles visually (with a "Test Connection" tool), and supports a **dedicated global shortcut** (e.g., `Alt + V`) to paste Markdown links into the active terminal using **direct OS-level text injection** (leaving the system clipboard untouched so images can still be pasted into WeChat/Word).
+Provide a premium, double-click-to-run desktop application for `img2cli` using **Tauri v2** to eliminate manual console compilation and configuration. The program runs natively in the **System Tray** (like Snipaste/OneDrive), manages SSH and Local host profiles visually (with a "Test Connection" tool), and supports a **dedicated global shortcut** (e.g., `Alt + V`) to paste Markdown links into both remote and local CLI targets using **direct OS-level text injection / quick clipboard swap** (leaving the system clipboard untouched so images can still be pasted into WeChat/Word).
 
 ---
 
@@ -23,28 +23,32 @@ graph TD
         Tray[System Tray Service]
         Hotkey[Tauri Global Shortcut Plugin]
         Worker[Background Listener Thread]
-        Injector[OS-Level Text Injector]
+        Injector[OS-Level Text Injector & Clipboard Swapper]
     end
 
     UI <-->|Tauri IPC Commands / Events| Backend
     Hotkey -->|On Trigger| Worker
     Worker -->|1. Capture Clipboard Image| Clipboard[System Clipboard]
-    Worker -->|2. Compress & Upload| SSH[Remote Server via SCP]
+    Worker -->|2. Upload or Save Locally| Target[SSH Server or Local Folder]
     Worker -->|3. Get Markdown Link| Injector
-    Injector -->|4. Send Input Events| Terminal[Active Window / Focus Target]
+    Injector -->|4. Send Input Events / Swap| Terminal[Active Window / Focus Target]
 ```
 
 ### 2.1 Backend Daemon (Rust)
 *   **Window Manager & System Tray**: Handles tray icon creation, minimize-to-tray window hide/show toggles, and context menus (Lock to Server, Auto Route, Pause/Resume, Exit).
-*   **Background Worker Thread**: Monitors the system clipboard for new images, runs JPEG compression, and handles SFTP/SCP uploads.
+*   **Background Worker Thread**: Monitors the system clipboard for new images, runs JPEG compression, and handles SFTP/SCP uploads or local copies.
 *   **Tauri Global Shortcut Plugin**: Registers the custom global hotkey configured by the user.
-*   **OS-Level Text Injector**:
-    *   **Windows**: Calls the Win32 `SendInput` API using the `KEYEVENTF_UNICODE` flag to type Unicode text directly into the active window. Bypasses character-by-character typing lag and IME state conflicts.
-    *   **macOS**: Uses the AppleScript keystroke API or CoreGraphics events to input text directly to the focused process.
+*   **OS-Level Text Injector & Swapper**:
+    *   **Direct Injection Mode (`direct`)**:
+        *   *Windows*: Calls the Win32 `SendInput` API using the `KEYEVENTF_UNICODE` flag to type Unicode text directly into the active window. Bypasses character-by-character typing lag and IME state conflicts.
+        *   *macOS*: Uses CoreGraphics event posting to type characters. Bypassed if AppleScript triggers input method interference.
+    *   **Quick Clipboard Swap Mode (`swap`)**:
+        *   Used as a fallback for older Windows terminals (e.g. legacy `cmd.exe`, MSYS2) and as the baseline on macOS to ensure maximum stability.
+        *   *Flow*: Backs up original image data from clipboard -> writes Markdown text link to clipboard -> simulates `Ctrl+V` (or `Cmd+V`) keypress -> sleeps for 50-100ms -> restores original image data back to clipboard.
 
 ### 2.2 Frontend Settings GUI (HTML/CSS/JS)
 *   **Aesthetics**: Premium modern dark-theme with glassmorphic components, subtle orange highlight borders, and smooth transition animations.
-*   **Host Manager (CRUD)**: Visual tables to manage targets with a dedicated "Test Connection" button calling backend SSH validation.
+*   **Host Manager (CRUD)**: Visual tables to manage targets (SSH and Local) with a dedicated "Test Connection" button calling backend validation.
 *   **Hotkey Recorder**: Custom key recorder component capturing key combinations (Ctrl, Alt, Shift, keys) to save configuration values.
 *   **Real-time Logs Panel**: Automatically streams terminal-like logs from backend stderr/stdout outputs using Tauri event listeners.
 
@@ -52,7 +56,7 @@ graph TD
 
 ## 3. Configuration Schema (`config.toml`)
 
-The configuration file is expanded to support GUI and hotkey preferences.
+The configuration file is expanded to support GUI, hotkey, and injection preferences.
 
 ```toml
 # Main settings
@@ -63,6 +67,9 @@ wrap_single_quotes = true              # Prevent history expansion in Bash
 launch_on_boot = true                  # Autostart on system launch
 enable_notifications = true            # System desktop notifications toggle
 global_hotkey = "Alt+V"                # Customized capture-and-paste hotkey
+upload_strategy = "eager"              # "eager" (upload on copy) or "lazy" (upload on hotkey)
+injection_mode = "direct"              # "direct" (OS virtual input) or "swap" (clipboard fast-swapping)
+clean_keep_days = 1                    # Auto-delete expired local files
 
 # Default SSH destination config
 [ssh]
@@ -73,14 +80,21 @@ username = "your_username"
 remote_dir = "/tmp/img2cli"
 match_pattern = ""
 
-# Auto Route target servers list
-[[ssh_targets]]
+# Target servers / local folders list
+[[targets]]
 enabled = true
-match_pattern = "S90"
+type = "ssh"                           # "ssh" or "local"
+match_pattern = "S90"                  # Target window title keyword
 host = "172.16.190.90"
 port = 22
 username = "user"
 remote_dir = "/s1/SHARE/user/tmp/img2cli"
+
+[[targets]]
+enabled = true
+type = "local"                         # "local" target type
+match_pattern = "WSL"                  # Match local WSL terminals
+local_dir = "./images"                 # Directory relative to project workspace or absolute path
 ```
 
 ---
@@ -94,23 +108,31 @@ remote_dir = "/s1/SHARE/user/tmp/img2cli"
 4.  Double-clicking the tray icon (or selecting "Open Settings" in the tray context menu) displays the main GUI Configuration Window.
 5.  Closing the configuration window hides it back to the system tray instead of exiting.
 
-### 4.2 Adding & Testing an SSH Target
+### 4.2 Adding & Testing an SSH/Local Target
 1.  User opens the "Hosts" tab in the GUI and clicks **`+ Add New Server`**.
-2.  An overlay dialog prompts for Name, Hostname, Username, Port, and Target Folder.
-3.  User clicks **`Test Connection`**.
-4.  Tauri backend runs a fast SSH key check and connection attempt:
+2.  An overlay dialog prompts for Type (SSH or Local), Name, Hostname, Username, Port, and Target Folder.
+3.  User clicks **`Test Connection`** (applicable to SSH targets):
+    *   Tauri backend runs a fast SSH key check and connection attempt.
     *   *Success*: Display a green checkmark next to the test button.
     *   *Failure*: Display a red error tooltip detailing the SSH connection error (e.g. *Timeout*, *Auth Failure*).
-5.  Clicking `Save` persists the target into `config.toml` and updates the running router state.
+4.  Clicking `Save` persists the target into `config.toml` and updates the running router state.
 
 ### 4.3 Upload & Direct Text Injection Flow (WeChat-Compatible)
-1.  User copies an image to their clipboard (e.g., using Snipaste/PrintScreen).
+
+#### Strategy A: Eager Upload (Recommended for High Speed)
+1.  User copies an image to their clipboard.
+2.  **Immediate Routing & Upload**: `img2cli` immediately checks the currently focused window's title (e.g., matching `"S90"`). If matched, it silently compresses and uploads the image to S90 in the background (or saves it locally if type is local).
+3.  `img2cli` saves the generated Markdown link (`'![image](/s1/SHARE/...)'`) into an in-memory variable.
+4.  **Paste to WeChat**: User presses `Ctrl + V` in WeChat. The original image pastes normally (clipboard remains untouched).
+5.  **Paste to Terminal**: User moves focus to their terminal window and presses **`Alt + V`**.
+6.  The backend immediately injects the Markdown link from memory using `SendInput` (or falls back to Quick Clipboard Swap) into the focused target. **Result is instantaneous.**
+
+#### Strategy B: Lazy Upload (Recommended for Bandwidth Saving)
+1.  User copies an image to their clipboard.
 2.  **Paste to WeChat**: User presses `Ctrl + V` in WeChat. The original image pastes normally.
-3.  **Paste to Terminal**: User moves focus to their terminal window and presses the custom shortcut **`Alt + V`**.
-4.  `img2cli` intercepts `Alt + V`, takes the image from the clipboard, compresses it, and uploads it to the active SSH server (matched by active window title auto-routing).
-5.  `img2cli` generates the markdown path (e.g., `'![image](/s1/SHARE/...)'`).
-6.  The backend calls `SendInput` (Windows) to instantly inject the Markdown text directly into the cursor focus of the active terminal.
-7.  **Result**: The Markdown text is pasted to the terminal, and the original image remains in the system clipboard (allowing the user to paste it into WeChat at any time).
+3.  **Paste to Terminal**: User moves focus to their terminal window and presses **`Alt + V`**.
+4.  `img2cli` intercepts `Alt + V`, detects the active window title, and starts compressing/uploading the image (displaying a tray notification: *"Uploading image..."*).
+5.  Once the upload finishes, the generated Markdown link is injected into the terminal.
 
 ---
 
