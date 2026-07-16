@@ -141,4 +141,29 @@ mod tests {
         assert_eq!(deserialized.output_format, "markdown");
         assert_eq!(deserialized.compress_quality, 80);
     }
+
+    #[test]
+    fn test_config_disk_io() {
+        let mut config = AppConfig::default();
+        config.output_format = "html".to_string();
+        config.compress_quality = 95;
+        
+        let temp_dir = std::env::temp_dir().join("img2cli_test");
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let test_path = temp_dir.join("config.toml");
+        
+        // Save
+        let content = toml::to_string_pretty(&config).unwrap();
+        std::fs::write(&test_path, content).unwrap();
+        
+        // Load
+        let read_content = std::fs::read_to_string(&test_path).unwrap();
+        let loaded: AppConfig = toml::from_str(&read_content).unwrap();
+        
+        assert_eq!(loaded.output_format, "html");
+        assert_eq!(loaded.compress_quality, 95);
+        
+        let _ = std::fs::remove_file(test_path);
+        let _ = std::fs::remove_dir(temp_dir);
+    }
 }

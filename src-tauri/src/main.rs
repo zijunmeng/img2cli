@@ -64,19 +64,23 @@ async fn test_connection(
 }
 
 fn main() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec![]),
         ))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
-            // Ensure configuration exists
-            let config = AppConfig::load();
-            let _ = config.save(); // Save default if it didn't exist
+            // Ensure configuration exists without overwriting corrupt files destructively
+            let path = AppConfig::config_file_path();
+            if !path.exists() {
+                let config = AppConfig::default();
+                let _ = config.save();
+            }
             
-            // Start the daemon thread
-            daemon::start_daemon(app.handle().clone());
+            // Start the daemon thread and manage its lifecycle state
+            let daemon_state = daemon::start_daemon(app.handle().clone());
+            app.manage(daemon_state);
             
             let window = app.get_webview_window("main").unwrap();
             let _ = window.hide();
@@ -87,6 +91,17 @@ fn main() {
             save_config,
             test_connection
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| {
+        if let tauri::RunEvent::Exit = event {
+            // Signal daemon background loop to terminate on application exit
+            if let Some(state) = app_handle.try_state::<daemon::DaemonState>() {
+                if let Ok(mut running) = state.running.lock() {
+                    *running = false;
+                }
+            }
+        }
+    });
 }
