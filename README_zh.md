@@ -18,10 +18,10 @@
 
 | 系统 | 文件 |
 |---|---|
-| Windows（安装版） | `img2cli_0.3.2_x64-setup.exe` / `img2cli_0.3.2_x64_en-US.msi` |
-| Windows（免安装便携版） | `img2cli-v0.3.2-windows-portable.zip` |
-| macOS（通用版） | `img2cli_0.3.2_universal.dmg` |
-| Linux | `img2cli_0.3.2_amd64.deb` / `.rpm` / `.AppImage` |
+| Windows（安装版） | `img2cli_0.3.3_x64-setup.exe` / `img2cli_0.3.3_x64_en-US.msi` |
+| Windows（免安装便携版） | `img2cli-v0.3.3-windows-portable.zip` |
+| macOS（通用版） | `img2cli_0.3.3_universal.dmg` |
+| Linux | `img2cli_0.3.3_amd64.deb` / `.rpm` / `.AppImage` |
 
 > ⚠️ 目前二进制**未签名**。首次启动时 Windows SmartScreen（以及 360 等部分杀软）可能拦截 —— 点 *更多信息 → 仍要运行*，或把程序加入信任区即可。代码签名已在规划中。
 

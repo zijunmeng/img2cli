@@ -18,10 +18,10 @@ Get the latest build from [GitHub Releases](https://github.com/zijunmeng/img2cli
 
 | OS | Asset |
 |---|---|
-| Windows (installer) | `img2cli_0.3.2_x64-setup.exe` / `img2cli_0.3.2_x64_en-US.msi` |
-| Windows (portable, no install) | `img2cli-v0.3.2-windows-portable.zip` |
-| macOS (universal) | `img2cli_0.3.2_universal.dmg` |
-| Linux | `img2cli_0.3.2_amd64.deb` / `.rpm` / `.AppImage` |
+| Windows (installer) | `img2cli_0.3.3_x64-setup.exe` / `img2cli_0.3.3_x64_en-US.msi` |
+| Windows (portable, no install) | `img2cli-v0.3.3-windows-portable.zip` |
+| macOS (universal) | `img2cli_0.3.3_universal.dmg` |
+| Linux | `img2cli_0.3.3_amd64.deb` / `.rpm` / `.AppImage` |
 
 > ⚠️ The binaries are currently **unsigned**. On first launch, Windows SmartScreen (and some antiviruses like 360) may warn — click *More info → Run anyway*, or add the app to your trust list. Code-signing is on the roadmap.
 

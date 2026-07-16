@@ -2,7 +2,7 @@
   <div class="relative flex h-screen text-slate-100 font-sans overflow-hidden bg-[#0a0b1e]">
     <!-- Ambient background glows (give the frosted glass something to blur) -->
     <div class="pointer-events-none absolute inset-0 z-0 overflow-hidden">
-      <div class="absolute -top-32 -left-24 w-[30rem] h-[30rem] rounded-full bg-orange-600/20 blur-[120px]"></div>
+      <div class="absolute -bottom-32 -left-24 w-[30rem] h-[30rem] rounded-full bg-orange-600/20 blur-[120px]"></div>
       <div class="absolute top-1/4 -right-24 w-[28rem] h-[28rem] rounded-full bg-fuchsia-600/15 blur-[120px]"></div>
       <div class="absolute -bottom-32 left-1/3 w-[26rem] h-[26rem] rounded-full bg-indigo-600/15 blur-[120px]"></div>
     </div>
@@ -24,7 +24,7 @@
         <nav class="p-4 space-y-1">
           <button 
             @click="activeTab = 'general'"
-            :class="['w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-medium text-sm', activeTab === 'general' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200']"
+            :class="['w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-medium text-sm', activeTab === 'general' ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-md shadow-orange-500/20' : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200']"
           >
             <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
@@ -34,7 +34,7 @@
 
           <button 
             @click="activeTab = 'hosts'"
-            :class="['w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-medium text-sm', activeTab === 'hosts' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200']"
+            :class="['w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-medium text-sm', activeTab === 'hosts' ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-md shadow-orange-500/20' : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200']"
           >
             <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
@@ -44,7 +44,7 @@
 
           <button 
             @click="activeTab = 'logs'"
-            :class="['w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-medium text-sm', activeTab === 'logs' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200']"
+            :class="['w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-medium text-sm', activeTab === 'logs' ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-md shadow-orange-500/20' : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200']"
           >
             <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -700,7 +700,7 @@ const checkSSHConnection = async () => {
 const recordHotkeyKeydown = (e) => {
   if (!recordingHotkey.value) return;
   e.preventDefault();
-  if (e.key === 'Escape') { recordingHotkey.value = false; return; }
+  if (e.key === 'Escape') { e.target.blur(); return; } // exit (re-click to record again)
   if (['Alt', 'Control', 'Shift', 'Meta'].includes(e.key)) return; // wait for a real key
   const mods = [];
   if (e.altKey) mods.push('Alt');
@@ -709,7 +709,7 @@ const recordHotkeyKeydown = (e) => {
   if (e.metaKey) mods.push('Super');
   let key = e.key.length === 1 ? e.key.toUpperCase() : (e.key === ' ' ? 'Space' : e.key);
   config.value.global_hotkey = [...mods, key].join('+');
-  recordingHotkey.value = false;
+  // stay armed while focused: press another combo to change again; Esc or click away to finish
 };
 
 // Clear stored SSH passwords from the OS keyring.
