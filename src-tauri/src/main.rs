@@ -1,7 +1,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod config;
+mod clipboard;
 mod daemon;
+mod injector;
 
 use config::AppConfig;
 use tauri::Manager;
@@ -16,14 +18,48 @@ fn get_config(state: tauri::State<'_, daemon::DaemonState>) -> Result<AppConfig,
 }
 
 #[tauri::command]
-fn save_config(config: AppConfig, state: tauri::State<'_, daemon::DaemonState>) -> Result<(), String> {
-    config.save()?;
-    if let Ok(mut daemon_config) = state.config.write() {
-        *daemon_config = config;
-        Ok(())
+fn save_config(
+    config: AppConfig,
+    state: tauri::State<'_, daemon::DaemonState>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    use std::str::FromStr;
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+
+    // Read old hotkey value to check for changes
+    let old_hotkey = if let Ok(c) = state.config.read() {
+        c.global_hotkey.clone()
     } else {
-        Err("Failed to acquire write lock for daemon configuration".to_string())
+        "".to_string()
+    };
+
+    config.save()?;
+
+    // Update managed daemon configuration
+    if let Ok(mut daemon_config) = state.config.write() {
+        *daemon_config = config.clone();
+    } else {
+        return Err("Failed to acquire write lock for daemon configuration".to_string());
     }
+
+    // Dynamic shortcut unregistration & registration updates
+    if old_hotkey != config.global_hotkey {
+        let manager = app_handle.global_shortcut();
+        
+        if let Ok(old_shortcut) = tauri_plugin_global_shortcut::Shortcut::from_str(&old_hotkey) {
+            let _ = manager.unregister(old_shortcut);
+        }
+        
+        if let Ok(new_shortcut) = tauri_plugin_global_shortcut::Shortcut::from_str(&config.global_hotkey) {
+            if manager.register(new_shortcut).is_ok() {
+                daemon::log_message(&app_handle, &state.log_history, &format!("Registered new global shortcut: {}", config.global_hotkey));
+            }
+        } else {
+            daemon::log_message(&app_handle, &state.log_history, &format!("Warning: Invalid global hotkey: {}", config.global_hotkey));
+        }
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -41,7 +77,6 @@ async fn test_connection(
     port: Option<u16>,
     username: Option<String>,
 ) -> Result<String, String> {
-    // 1. Sanitize inputs to prevent SSH option injection vulnerabilities
     let host_trimmed = host.trim();
     if host_trimmed.is_empty() {
         return Err("Invalid host: host name cannot be empty".to_string());
@@ -69,7 +104,6 @@ async fn test_connection(
     args.push("-o".to_string());
     args.push("BatchMode=yes".to_string());
     
-    // Use -- to separate options from host argument
     args.push("--".to_string());
     
     let dest = if let Some(ref user) = username {
@@ -108,9 +142,17 @@ fn main() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec![]),
         ))
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_global_shortcut::Builder::new()
+            .with_handler(|app_handle, _shortcut, event| {
+                if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                    if let Some(state) = app_handle.try_state::<daemon::DaemonState>() {
+                        daemon::trigger_capture_and_paste(app_handle, &state);
+                    }
+                }
+            })
+            .build())
         .setup(|app| {
-            // Ensure configuration exists safely without destructive overwriting on syntax errors
+            // Ensure configuration exists safely
             let path = AppConfig::config_file_path();
             if !path.exists() {
                 let config = AppConfig::default();
@@ -128,10 +170,23 @@ fn main() {
                 }
             };
             
-            // Start the daemon thread and manage its lifecycle state
-            let daemon_state = daemon::start_daemon(app.handle().clone(), initial_config);
+            // Start the daemon thread
+            let daemon_state = daemon::start_daemon(app.handle().clone(), initial_config.clone());
             
-            // Route startup error logs through the daemon logging system if loading failed
+            // Register initial global shortcut
+            use std::str::FromStr;
+            use tauri_plugin_global_shortcut::GlobalShortcutExt;
+            if let Ok(shortcut) = tauri_plugin_global_shortcut::Shortcut::from_str(&initial_config.global_hotkey) {
+                let _ = app.handle().global_shortcut().register(shortcut);
+            } else {
+                daemon::log_message(
+                    &app.handle(),
+                    &daemon_state.log_history,
+                    &format!("Warning: Invalid initial global hotkey: {}", initial_config.global_hotkey),
+                );
+            }
+
+            // Route startup load error log if present
             if let Some(err_msg) = load_error {
                 daemon::log_message(
                     &app.handle(),
@@ -157,7 +212,6 @@ fn main() {
 
     app.run(|app_handle, event| {
         if let tauri::RunEvent::Exit = event {
-            // Signal daemon background loop to terminate on application exit
             if let Some(state) = app_handle.try_state::<daemon::DaemonState>() {
                 if let Ok(mut running) = state.running.lock() {
                     *running = false;

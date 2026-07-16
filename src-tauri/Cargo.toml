@@ -14,7 +14,12 @@ arboard = "3.4.1"
 chrono = "0.4.38"
 rdev = "0.5.3"
 enigo = "0.5.0"
+image = { version = "0.25.2", default-features = false, features = ["png", "jpeg"] }
 log = "0.4"
 
 [build-dependencies]
 tauri-build = "2.0.0"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation"] }
+
