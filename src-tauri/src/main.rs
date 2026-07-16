@@ -43,6 +43,9 @@ async fn test_connection(
 ) -> Result<String, String> {
     // 1. Sanitize inputs to prevent SSH option injection vulnerabilities
     let host_trimmed = host.trim();
+    if host_trimmed.is_empty() {
+        return Err("Invalid host: host name cannot be empty".to_string());
+    }
     if host_trimmed.starts_with('-') {
         return Err("Invalid host: host name cannot start with a hyphen".to_string());
     }
@@ -114,11 +117,13 @@ fn main() {
                 let _ = config.save();
             }
             
+            let mut load_error = None;
             let initial_config = match AppConfig::load() {
                 Ok(c) => c,
                 Err(e) => {
-                    eprintln!("Configuration load error: {}", e);
-                    // App will fallback to default config in memory, but we keep the corrupt file intact
+                    let err_msg = format!("Configuration load error: {}", e);
+                    eprintln!("{}", err_msg);
+                    load_error = Some(err_msg);
                     AppConfig::default()
                 }
             };
@@ -127,14 +132,12 @@ fn main() {
             let daemon_state = daemon::start_daemon(app.handle().clone(), initial_config);
             
             // Route startup error logs through the daemon logging system if loading failed
-            if path.exists() {
-                if let Err(e) = AppConfig::load() {
-                    daemon::log_message(
-                        &app.handle(),
-                        &daemon_state.log_history,
-                        &format!("Configuration load error: {}", e),
-                    );
-                }
+            if let Some(err_msg) = load_error {
+                daemon::log_message(
+                    &app.handle(),
+                    &daemon_state.log_history,
+                    &err_msg,
+                );
             }
             
             app.manage(daemon_state);

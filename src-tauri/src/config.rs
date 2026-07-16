@@ -56,9 +56,11 @@ pub struct AppConfig {
     #[serde(default = "default_clean_keep_days")]
     pub clean_keep_days: u32,
     
+    #[serde(default)]
     pub ssh: Option<SshConfig>,
     #[serde(default)]
     pub ssh_targets: Option<Vec<SshConfig>>,
+    #[serde(default)]
     pub targets: Option<Vec<TargetConfig>>,
 }
 
