@@ -4,6 +4,7 @@ mod config;
 mod clipboard;
 mod daemon;
 mod injector;
+mod ssh_config;
 
 use config::AppConfig;
 use tauri::Manager;
@@ -157,6 +158,58 @@ async fn test_connection(
     }
 }
 
+#[tauri::command]
+fn load_ssh_config() -> Result<Vec<ssh_config::SshHostEntry>, String> {
+    let path = ssh_config::ssh_config_path()
+        .ok_or_else(|| "Could not determine home directory".to_string())?;
+    if !path.exists() {
+        return Err(format!("OpenSSH config not found: {:?}", path));
+    }
+    let content = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read {:?}: {}", path, e))?;
+    Ok(ssh_config::parse_ssh_config(&content))
+}
+
+/// Re-launch the app elevated (Windows only) so SendInput/Enigo can reach
+/// terminals that run as Administrator. UIPI otherwise blocks synthetic input
+/// into a higher-integrity window, producing
+/// "not all input events were sent ... blocked by UIPI".
+#[cfg(windows)]
+fn restart_as_admin(app: &tauri::AppHandle) {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::core::PCWSTR;
+    use windows_sys::Win32::UI::Shell::ShellExecuteW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+
+    let exe = match std::env::current_exe() {
+        Ok(p) => p,
+        Err(_) => return,
+    };
+    let file: Vec<u16> = std::ffi::OsStr::new(exe.as_os_str())
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let verb: Vec<u16> = "runas".encode_utf16().chain(std::iter::once(0)).collect();
+
+    // ShellExecuteW(NULL, "runas", <exe>, NULL, NULL, SW_SHOWNORMAL).
+    // A return value <= 32 means failure (e.g. the user declined the UAC prompt).
+    let hinst = unsafe {
+        ShellExecuteW(
+            0,
+            PCWSTR(verb.as_ptr()),
+            PCWSTR(file.as_ptr()),
+            PCWSTR(std::ptr::null::<u16>()),
+            PCWSTR(std::ptr::null::<u16>()),
+            SW_SHOWNORMAL,
+        )
+    };
+    if hinst as isize <= 32 {
+        // User declined UAC or it otherwise failed — keep the current instance.
+        return;
+    }
+    app.exit(0);
+}
+
 fn main() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_autostart::init(
@@ -239,7 +292,20 @@ fn main() {
             // Build the system tray and context menu
             let show_i = MenuItem::with_id(app, "show", "Show Settings", true, None::<&str>)?;
             let exit_i = MenuItem::with_id(app, "exit", "Exit", true, None::<&str>)?;
-            let menu = MenuBuilder::new(app).item(&show_i).item(&exit_i).build()?;
+            #[cfg(windows)]
+            let admin_i = MenuItem::with_id(
+                app,
+                "restart_admin",
+                "Restart as Administrator",
+                true,
+                None::<&str>,
+            )?;
+            let mut builder = MenuBuilder::new(app).item(&show_i);
+            #[cfg(windows)]
+            {
+                builder = builder.item(&admin_i);
+            }
+            let menu = builder.item(&exit_i).build()?;
             
             let icon = app.default_window_icon().cloned().unwrap();
             let _tray = TrayIconBuilder::with_id("main-tray")
@@ -252,6 +318,10 @@ fn main() {
                                 let _ = window.show();
                                 let _ = window.set_focus();
                             }
+                        }
+                        "restart_admin" => {
+                            #[cfg(windows)]
+                            restart_as_admin(app);
                         }
                         "exit" => app.exit(0),
                         _ => {}
@@ -267,7 +337,8 @@ fn main() {
             get_config,
             save_config,
             get_log_history,
-            test_connection
+            test_connection,
+            load_ssh_config
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

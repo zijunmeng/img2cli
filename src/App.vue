@@ -1,9 +1,15 @@
 <template>
-  <div class="flex h-screen bg-slate-950 text-slate-100 font-sans overflow-hidden">
+  <div class="relative flex h-screen text-slate-100 font-sans overflow-hidden bg-[#0a0b1e]">
+    <!-- Ambient background glows (give the frosted glass something to blur) -->
+    <div class="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+      <div class="absolute -top-32 -left-24 w-[30rem] h-[30rem] rounded-full bg-orange-600/20 blur-[120px]"></div>
+      <div class="absolute top-1/4 -right-24 w-[28rem] h-[28rem] rounded-full bg-fuchsia-600/15 blur-[120px]"></div>
+      <div class="absolute -bottom-32 left-1/3 w-[26rem] h-[26rem] rounded-full bg-indigo-600/15 blur-[120px]"></div>
+    </div>
     <!-- Sidebar -->
-    <div class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between shrink-0">
+    <div class="relative z-10 w-64 bg-white/[0.04] backdrop-blur-2xl border-r border-white/10 flex flex-col justify-between shrink-0">
       <div>
-        <div class="p-6 border-b border-slate-800/60 flex items-center gap-3">
+        <div class="p-6 border-b border-white/10 flex items-center gap-3">
           <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-orange-500 to-amber-500 flex items-center justify-center shadow-lg shadow-orange-500/20">
             <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -48,7 +54,7 @@
         </nav>
       </div>
 
-      <div class="p-4 border-t border-slate-800/60">
+      <div class="p-4 border-t border-white/10">
         <button 
           @click="saveSettings" 
           class="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white px-4 py-2.5 rounded-xl font-semibold shadow-lg shadow-orange-500/20 active:scale-[0.98] transition-all duration-150 text-sm"
@@ -59,7 +65,7 @@
     </div>
 
     <!-- Main Content -->
-    <div class="flex-1 flex flex-col min-w-0 bg-slate-950 overflow-y-auto">
+    <div class="relative z-10 flex-1 flex flex-col min-w-0 overflow-y-auto">
       <main class="flex-1 p-8 max-w-4xl w-full mx-auto space-y-6">
         
         <!-- General Settings Tab -->
@@ -73,7 +79,7 @@
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <!-- Left Card -->
-            <div class="bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-2xl p-6 space-y-4">
+            <div class="bg-white/[0.05] backdrop-blur-2xl border border-white/10 rounded-2xl p-6 space-y-4 shadow-[0_8px_32px_rgba(0,0,0,0.37)]">
               <h3 class="text-sm font-semibold uppercase text-slate-500 tracking-wider">Image Config</h3>
               
               <div>
@@ -101,7 +107,7 @@
             </div>
 
             <!-- Right Card -->
-            <div class="bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-2xl p-6 space-y-4">
+            <div class="bg-white/[0.05] backdrop-blur-2xl border border-white/10 rounded-2xl p-6 space-y-4 shadow-[0_8px_32px_rgba(0,0,0,0.37)]">
               <h3 class="text-sm font-semibold uppercase text-slate-500 tracking-wider">System Integration</h3>
 
               <div>
@@ -153,7 +159,7 @@
           </div>
           
           <!-- Save Directory Config -->
-          <div class="bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-2xl p-6 space-y-4">
+          <div class="bg-white/[0.05] backdrop-blur-2xl border border-white/10 rounded-2xl p-6 space-y-4 shadow-[0_8px_32px_rgba(0,0,0,0.37)]">
             <h3 class="text-sm font-semibold uppercase text-slate-500 tracking-wider">Advanced Paths</h3>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
@@ -176,7 +182,7 @@
           </div>
 
           <!-- Default SSH Config -->
-          <div class="bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-2xl p-6 space-y-4">
+          <div class="bg-white/[0.05] backdrop-blur-2xl border border-white/10 rounded-2xl p-6 space-y-4 shadow-[0_8px_32px_rgba(0,0,0,0.37)]">
             <div class="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 class="text-sm font-semibold uppercase text-slate-500 tracking-wider">Default Remote SSH Host</h3>
               <label class="relative inline-flex items-center cursor-pointer">
@@ -199,7 +205,7 @@
                 <input type="text" v-model="config.ssh.username" :disabled="!config.ssh.enabled" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200 disabled:opacity-50" />
               </div>
               <div>
-                <label class="block text-xs font-semibold text-slate-400 mb-1">Remote Target Directory</label>
+                <label class="block text-xs font-semibold text-slate-400 mb-1">Remote Copy Destination Folder</label>
                 <input type="text" v-model="config.ssh.remote_dir" :disabled="!config.ssh.enabled" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200 disabled:opacity-50" />
               </div>
             </div>
@@ -217,18 +223,30 @@
           </div>
 
           <!-- Dynamic Targets List -->
-          <div class="bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-2xl p-6 space-y-4">
+          <div class="bg-white/[0.05] backdrop-blur-2xl border border-white/10 rounded-2xl p-6 space-y-4 shadow-[0_8px_32px_rgba(0,0,0,0.37)]">
             <div class="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 class="text-sm font-semibold uppercase text-slate-500 tracking-wider">Dynamic Router Targets</h3>
-              <button 
-                @click="showAddTargetModal = true" 
-                class="bg-orange-500 hover:bg-orange-600 text-white font-semibold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 active:scale-[0.98] transition-all"
-              >
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                </svg>
-                Add Target
-              </button>
+              <div class="flex items-center gap-2">
+                <button
+                  @click="openSshLoader"
+                  :disabled="loadingSsh"
+                  class="bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 font-semibold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 active:scale-[0.98] transition-all disabled:opacity-50"
+                >
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                  </svg>
+                  Load SSH Config
+                </button>
+                <button
+                  @click="showAddTargetModal = true"
+                  class="bg-orange-500 hover:bg-orange-600 text-white font-semibold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 active:scale-[0.98] transition-all"
+                >
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add Target
+                </button>
+              </div>
             </div>
 
             <!-- Targets Table -->
@@ -262,6 +280,7 @@
                       <span v-else>{{ target.local_dir }}</span>
                     </td>
                     <td class="py-3 px-4 text-right space-x-2">
+                      <button v-if="target.type === 'ssh'" @click="setAsDefault(idx)" class="text-xs font-semibold text-orange-400/80 hover:text-orange-300 transition-colors">Set Default</button>
                       <button @click="editTarget(idx)" class="text-xs font-semibold text-slate-400 hover:text-white transition-colors">Edit</button>
                       <button @click="deleteTarget(idx)" class="text-xs font-semibold text-red-500/80 hover:text-red-400 transition-colors">Delete</button>
                     </td>
@@ -300,7 +319,7 @@
 
     <!-- Add/Edit Target Modal -->
     <div v-if="showAddTargetModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+      <div class="bg-white/[0.07] backdrop-blur-2xl border border-white/10 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
         <h3 class="text-lg font-bold text-white">{{ editingTargetIndex !== null ? 'Edit Router Target' : 'Add Router Target' }}</h3>
         
         <div class="space-y-3">
@@ -333,7 +352,7 @@
               <input type="text" v-model="tempTarget.username" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200" />
             </div>
             <div>
-              <label class="block text-xs font-semibold text-slate-400 mb-1">Remote Directory</label>
+              <label class="block text-xs font-semibold text-slate-400 mb-1">Remote Copy Destination Folder</label>
               <input type="text" v-model="tempTarget.remote_dir" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200" />
             </div>
           </div>
@@ -352,6 +371,34 @@
       </div>
     </div>
 
+    <!-- SSH Config Loader Modal -->
+    <div v-if="showSshModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div class="bg-white/[0.07] backdrop-blur-2xl border border-white/10 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+        <div class="flex items-center justify-between">
+          <h3 class="text-lg font-bold text-white">Load OpenSSH config</h3>
+          <span class="text-xs text-slate-400 font-mono">~/.ssh/config</span>
+        </div>
+        <input type="text" v-model="sshSearch" placeholder="Search hosts (alias / host / user)..." class="w-full bg-slate-950/60 border border-white/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200" />
+        <div class="max-h-72 overflow-y-auto space-y-1 pr-1">
+          <label v-for="{ h, i } in filteredSshHosts" :key="i" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 cursor-pointer">
+            <input type="checkbox" v-model="sshSelected[i]" class="accent-orange-500 w-4 h-4" />
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-semibold text-slate-100 truncate">{{ h.alias }}</div>
+              <div class="text-xs text-slate-400 truncate font-mono">{{ h.username }}@{{ h.host }}:{{ h.port }}</div>
+            </div>
+          </label>
+          <div v-if="!filteredSshHosts.length" class="text-slate-500 text-center py-8 text-sm">No hosts found.</div>
+        </div>
+        <div class="flex items-center justify-between pt-3 border-t border-white/10">
+          <button @click="toggleAllSsh(true)" class="text-xs font-semibold text-slate-300 hover:text-white transition-colors">Select All</button>
+          <div class="flex gap-3">
+            <button @click="closeSshModal" class="bg-white/5 hover:bg-white/10 text-slate-200 px-4 py-2 rounded-xl text-xs font-semibold">Cancel</button>
+            <button @click="importSshSelected" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-xl text-xs font-semibold">Import Selected</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Notification Toast -->
     <div v-if="toast.show" :class="['fixed bottom-6 right-6 p-4 rounded-xl shadow-2xl flex items-center gap-3 border z-50 transition-all duration-300 max-w-sm', toast.isError ? 'bg-red-950/90 border-red-800 text-red-200' : 'bg-emerald-950/90 border-emerald-800 text-emerald-200']">
       <svg v-if="toast.isError" class="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -366,7 +413,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue';
+import { ref, onMounted, nextTick, computed } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
@@ -419,6 +466,24 @@ const tempTarget = ref({
   local_dir: ''
 });
 
+// ---- OpenSSH config loader ----
+const sshHosts = ref([]);
+const sshSelected = ref([]); // parallel boolean array (index -> selected)
+const showSshModal = ref(false);
+const sshSearch = ref('');
+const loadingSsh = ref(false);
+
+const filteredSshHosts = computed(() => {
+  const q = sshSearch.value.trim().toLowerCase();
+  const all = sshHosts.value.map((h, i) => ({ h, i }));
+  if (!q) return all;
+  return all.filter(({ h }) =>
+    h.alias.toLowerCase().includes(q) ||
+    h.host.toLowerCase().includes(q) ||
+    h.username.toLowerCase().includes(q)
+  );
+});
+
 // Toast Manager
 const toast = ref({
   show: false,
@@ -433,6 +498,71 @@ const showToast = (msg, isErr = false) => {
   setTimeout(() => {
     toast.value.show = false;
   }, 4000);
+};
+
+// ---- OpenSSH config loader actions ----
+const openSshLoader = async () => {
+  loadingSsh.value = true;
+  try {
+    const hosts = await invoke('load_ssh_config');
+    sshHosts.value = hosts || [];
+    sshSelected.value = sshHosts.value.map(() => false);
+    sshSearch.value = '';
+    showSshModal.value = true;
+  } catch (err) {
+    showToast(`Failed to load SSH config: ${err}`, true);
+  } finally {
+    loadingSsh.value = false;
+  }
+};
+
+const closeSshModal = () => {
+  showSshModal.value = false;
+  sshHosts.value = [];
+  sshSelected.value = [];
+  sshSearch.value = '';
+};
+
+const toggleAllSsh = (val) => {
+  const next = sshSelected.value.slice();
+  filteredSshHosts.value.forEach(({ i }) => { next[i] = val; });
+  sshSelected.value = next;
+};
+
+const importSshSelected = () => {
+  const remoteDir = config.value.ssh?.remote_dir || '/tmp/img2cli';
+  let added = 0;
+  sshHosts.value.forEach((h, i) => {
+    if (!sshSelected.value[i]) return;
+    config.value.targets.push({
+      enabled: true,
+      type: 'ssh',
+      match_pattern: h.alias,
+      host: h.host,
+      port: h.port,
+      username: h.username,
+      remote_dir: remoteDir,
+      local_dir: ''
+    });
+    added += 1;
+  });
+  closeSshModal();
+  showToast(`Imported ${added} host(s) as router targets.`);
+};
+
+// Copy a router target's SSH host into the default host configuration
+const setAsDefault = (index) => {
+  const t = config.value.targets[index];
+  if (!t || t.type !== 'ssh') return;
+  config.value.ssh = {
+    enabled: true,
+    host: t.host || '',
+    port: t.port || 22,
+    username: t.username || '',
+    remote_dir: t.remote_dir || config.value.ssh?.remote_dir || '/tmp/img2cli',
+    match_pattern: config.value.ssh?.match_pattern || ''
+  };
+  showToast(`Set "${t.match_pattern}" as the default SSH host.`);
 };
 
 // Load Configurations

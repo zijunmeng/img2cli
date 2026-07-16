@@ -52,3 +52,20 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.platform == 'macos-latest' && '--target universal-apple-darwin' || '' }}
+
+      # Portable (no-install) Windows build. The raw Tauri exe is self-contained
+      # (frontend embedded; uses the system WebView2 runtime preinstalled on
+      # Win10/11), so it runs green-portable — like wispterm's portable flavor.
+      - name: Package Portable Binary (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path src-tauri/target/release/img2cli.exe -DestinationPath img2cli-${{ github.ref_name }}-windows-portable.zip
+
+      - name: Upload Portable Zip to Release (Windows)
+        if: matrix.platform == 'windows-latest'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: img2cli-${{ github.ref_name }}-windows-portable.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
