@@ -1,5 +1,582 @@
 <template>
-  <div class="flex items-center justify-center h-screen bg-slate-950">
-    <h1 class="text-3xl font-bold text-orange-500">img2cli Settings v0.3.0</h1>
+  <div class="flex h-screen bg-slate-950 text-slate-100 font-sans overflow-hidden">
+    <!-- Sidebar -->
+    <div class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between shrink-0">
+      <div>
+        <div class="p-6 border-b border-slate-800/60 flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-orange-500 to-amber-500 flex items-center justify-center shadow-lg shadow-orange-500/20">
+            <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <div>
+            <h1 class="text-lg font-bold bg-gradient-to-r from-orange-400 to-amber-400 bg-clip-text text-transparent">img2cli</h1>
+            <p class="text-xs text-slate-500">Settings v0.3.0</p>
+          </div>
+        </div>
+
+        <nav class="p-4 space-y-1">
+          <button 
+            @click="activeTab = 'general'"
+            :class="['w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-medium text-sm', activeTab === 'general' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200']"
+          >
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+            </svg>
+            General Settings
+          </button>
+
+          <button 
+            @click="activeTab = 'hosts'"
+            :class="['w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-medium text-sm', activeTab === 'hosts' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200']"
+          >
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+            Hosts & Targets
+          </button>
+
+          <button 
+            @click="activeTab = 'logs'"
+            :class="['w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-medium text-sm', activeTab === 'logs' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200']"
+          >
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            System Logs
+          </button>
+        </nav>
+      </div>
+
+      <div class="p-4 border-t border-slate-800/60">
+        <button 
+          @click="saveSettings" 
+          class="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white px-4 py-2.5 rounded-xl font-semibold shadow-lg shadow-orange-500/20 active:scale-[0.98] transition-all duration-150 text-sm"
+        >
+          Save Settings
+        </button>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex flex-col min-w-0 bg-slate-950 overflow-y-auto">
+      <main class="flex-1 p-8 max-w-4xl w-full mx-auto space-y-6">
+        
+        <!-- General Settings Tab -->
+        <div v-if="activeTab === 'general'" class="space-y-6">
+          <div class="flex justify-between items-center">
+            <div>
+              <h2 class="text-2xl font-bold tracking-tight text-white">General Settings</h2>
+              <p class="text-sm text-slate-400">Configure global screenshot format, hotkeys, and injection preferences.</p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Left Card -->
+            <div class="bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-2xl p-6 space-y-4">
+              <h3 class="text-sm font-semibold uppercase text-slate-500 tracking-wider">Image Config</h3>
+              
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1">Output Format</label>
+                <select v-model="config.output_format" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200">
+                  <option value="markdown">Markdown (![image](path))</option>
+                  <option value="html">HTML (&lt;img src="path" /&gt;)</option>
+                  <option value="raw">Raw Path</option>
+                  <option value="base64">Inline Base64 Data URI</option>
+                </select>
+              </div>
+
+              <div>
+                <div class="flex justify-between text-xs font-semibold text-slate-400 mb-1">
+                  <span>Compression Quality</span>
+                  <span class="text-orange-400">{{ config.compress_quality }}%</span>
+                </div>
+                <input type="range" min="10" max="100" v-model.number="config.compress_quality" class="w-full accent-orange-500 bg-slate-950" />
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1">Max Dimension (Pixels)</label>
+                <input type="number" v-model.number="config.max_dimension" placeholder="No Limit" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200" />
+              </div>
+            </div>
+
+            <!-- Right Card -->
+            <div class="bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-2xl p-6 space-y-4">
+              <h3 class="text-sm font-semibold uppercase text-slate-500 tracking-wider">System Integration</h3>
+
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1">Global Hotkey</label>
+                <input type="text" v-model="config.global_hotkey" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200 font-mono" />
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1">Injection Mode</label>
+                <select v-model="config.injection_mode" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200">
+                  <option value="direct">Direct Native Keystrokes (Bypasses IME)</option>
+                  <option value="swap">Quick Clipboard Swap & Paste</option>
+                </select>
+              </div>
+
+              <div class="flex items-center justify-between py-1">
+                <div>
+                  <span class="block text-sm font-medium text-slate-200">Wrap in Single Quotes</span>
+                  <span class="block text-xs text-slate-500">Wrap generated link in 'quotes'</span>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" v-model="config.wrap_single_quotes" class="sr-only peer" />
+                  <div class="w-11 h-6 bg-slate-800 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-slate-300 after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
+                </label>
+              </div>
+
+              <div class="flex items-center justify-between py-1">
+                <div>
+                  <span class="block text-sm font-medium text-slate-200">Launch on Boot</span>
+                  <span class="block text-xs text-slate-500">Start img2cli automatically</span>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" v-model="config.launch_on_boot" class="sr-only peer" />
+                  <div class="w-11 h-6 bg-slate-800 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-slate-300 after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
+                </label>
+              </div>
+
+              <div class="flex items-center justify-between py-1">
+                <div>
+                  <span class="block text-sm font-medium text-slate-200">Enable Desktop Notifications</span>
+                  <span class="block text-xs text-slate-500">Show tips on screenshot success</span>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" v-model="config.enable_notifications" class="sr-only peer" />
+                  <div class="w-11 h-6 bg-slate-800 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-slate-300 after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
+                </label>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Save Directory Config -->
+          <div class="bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-2xl p-6 space-y-4">
+            <h3 class="text-sm font-semibold uppercase text-slate-500 tracking-wider">Advanced Paths</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1">Local Temporary Directory</label>
+                <input type="text" v-model="config.save_dir" placeholder="Default (Temp Dir/img2cli)" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1">Clean Expired Image Files (Days)</label>
+                <input type="number" v-model.number="config.clean_keep_days" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Hosts & Targets Tab -->
+        <div v-if="activeTab === 'hosts'" class="space-y-6">
+          <div>
+            <h2 class="text-2xl font-bold tracking-tight text-white">Hosts & Targets</h2>
+            <p class="text-sm text-slate-400">Configure remote SSH servers and local workspace directory routing.</p>
+          </div>
+
+          <!-- Default SSH Config -->
+          <div class="bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-2xl p-6 space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 class="text-sm font-semibold uppercase text-slate-500 tracking-wider">Default Remote SSH Host</h3>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" v-model="config.ssh.enabled" class="sr-only peer" />
+                <div class="w-11 h-6 bg-slate-800 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-slate-300 after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
+              </label>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1">Host (IP / Alias)</label>
+                <input type="text" v-model="config.ssh.host" :disabled="!config.ssh.enabled" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200 disabled:opacity-50" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1">Port</label>
+                <input type="number" v-model.number="config.ssh.port" :disabled="!config.ssh.enabled" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200 disabled:opacity-50" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1">Username</label>
+                <input type="text" v-model="config.ssh.username" :disabled="!config.ssh.enabled" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200 disabled:opacity-50" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1">Remote Target Directory</label>
+                <input type="text" v-model="config.ssh.remote_dir" :disabled="!config.ssh.enabled" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200 disabled:opacity-50" />
+              </div>
+            </div>
+
+            <div class="flex justify-end pt-2">
+              <button 
+                @click="checkSSHConnection" 
+                :disabled="!config.ssh.enabled || testingConnection"
+                class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold px-4 py-2 rounded-xl text-xs active:scale-[0.98] transition-all disabled:opacity-50 flex items-center gap-2"
+              >
+                <span v-if="testingConnection" class="w-3 h-3 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></span>
+                {{ testingConnection ? 'Testing...' : 'Test Connection' }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Dynamic Targets List -->
+          <div class="bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-2xl p-6 space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 class="text-sm font-semibold uppercase text-slate-500 tracking-wider">Dynamic Router Targets</h3>
+              <button 
+                @click="showAddTargetModal = true" 
+                class="bg-orange-500 hover:bg-orange-600 text-white font-semibold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 active:scale-[0.98] transition-all"
+              >
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+                Add Target
+              </button>
+            </div>
+
+            <!-- Targets Table -->
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse">
+                <thead>
+                  <tr class="border-b border-slate-850 text-xs font-semibold text-slate-500">
+                    <th class="py-3 px-4">Status</th>
+                    <th class="py-3 px-4">Match Pattern</th>
+                    <th class="py-3 px-4">Type</th>
+                    <th class="py-3 px-4">Details</th>
+                    <th class="py-3 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800/40 text-sm">
+                  <tr v-for="(target, idx) in (config.targets || [])" :key="idx" class="hover:bg-slate-900/20">
+                    <td class="py-3 px-4">
+                      <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" v-model="target.enabled" class="sr-only peer" />
+                        <div class="w-9 h-5 bg-slate-800 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-slate-300 after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500"></div>
+                      </label>
+                    </td>
+                    <td class="py-3 px-4 font-semibold text-slate-200">{{ target.match_pattern }}</td>
+                    <td class="py-3 px-4">
+                      <span :class="['px-2 py-0.5 rounded-md text-xs font-semibold uppercase', target.type === 'ssh' ? 'bg-orange-500/10 text-orange-400 border border-orange-500/25' : 'bg-amber-500/10 text-amber-400 border border-amber-500/25']">
+                        {{ target.type }}
+                      </span>
+                    </td>
+                    <td class="py-3 px-4 text-xs text-slate-400">
+                      <span v-if="target.type === 'ssh'">{{ target.username }}@{{ target.host }}:{{ target.remote_dir }}</span>
+                      <span v-else>{{ target.local_dir }}</span>
+                    </td>
+                    <td class="py-3 px-4 text-right space-x-2">
+                      <button @click="editTarget(idx)" class="text-xs font-semibold text-slate-400 hover:text-white transition-colors">Edit</button>
+                      <button @click="deleteTarget(idx)" class="text-xs font-semibold text-red-500/80 hover:text-red-400 transition-colors">Delete</button>
+                    </td>
+                  </tr>
+                  <tr v-if="!(config.targets || []).length">
+                    <td colspan="5" class="py-6 text-center text-slate-500 text-xs">No routing targets configured. Clipboard uploads will fallback to default host.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- System Logs Tab -->
+        <div v-if="activeTab === 'logs'" class="space-y-6 flex flex-col h-[calc(100vh-8rem)]">
+          <div class="flex justify-between items-center shrink-0">
+            <div>
+              <h2 class="text-2xl font-bold tracking-tight text-white">System Logs</h2>
+              <p class="text-sm text-slate-400">Real-time daemon events and screenshot processing logs.</p>
+            </div>
+            <button @click="logs = []" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold px-3 py-1.5 rounded-xl text-xs active:scale-[0.98] transition-all">
+              Clear Logs
+            </button>
+          </div>
+
+          <div class="flex-1 bg-slate-950 border border-slate-850 rounded-2xl p-4 overflow-y-auto font-mono text-xs text-slate-400 space-y-1.5 shadow-inner" ref="logContainer">
+            <div v-for="(log, idx) in logs" :key="idx" class="whitespace-pre-wrap leading-relaxed">
+              <span class="text-slate-600 select-none">[{{ idx + 1 }}]</span> {{ log }}
+            </div>
+            <div v-if="!logs.length" class="text-slate-600 text-center py-12">No logs loaded. Press global hotkey to trigger daemon activity.</div>
+          </div>
+        </div>
+
+      </main>
+    </div>
+
+    <!-- Add/Edit Target Modal -->
+    <div v-if="showAddTargetModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+        <h3 class="text-lg font-bold text-white">{{ editingTargetIndex !== null ? 'Edit Router Target' : 'Add Router Target' }}</h3>
+        
+        <div class="space-y-3">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 mb-1">Target Type</label>
+              <select v-model="tempTarget.type" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200">
+                <option value="ssh">SSH (Remote Server)</option>
+                <option value="local">Local Folder</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 mb-1">Active Window Match Pattern</label>
+              <input type="text" v-model="tempTarget.match_pattern" placeholder="e.g. S90, WSL" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200" />
+            </div>
+          </div>
+
+          <!-- SSH Target Fields -->
+          <div v-if="tempTarget.type === 'ssh'" class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 mb-1">Host (IP / Alias)</label>
+              <input type="text" v-model="tempTarget.host" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 mb-1">Port</label>
+              <input type="number" v-model.number="tempTarget.port" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 mb-1">Username</label>
+              <input type="text" v-model="tempTarget.username" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 mb-1">Remote Directory</label>
+              <input type="text" v-model="tempTarget.remote_dir" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200" />
+            </div>
+          </div>
+
+          <!-- Local Target Fields -->
+          <div v-if="tempTarget.type === 'local'">
+            <label class="block text-xs font-semibold text-slate-400 mb-1">Local Copy Destination Folder</label>
+            <input type="text" v-model="tempTarget.local_dir" placeholder="e.g. C:\users\docs\images" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200" />
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-3 pt-3 border-t border-slate-800">
+          <button @click="closeTargetModal" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-xl text-xs font-semibold">Cancel</button>
+          <button @click="saveTarget" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-xl text-xs font-semibold">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div v-if="toast.show" :class="['fixed bottom-6 right-6 p-4 rounded-xl shadow-2xl flex items-center gap-3 border z-50 transition-all duration-300 max-w-sm', toast.isError ? 'bg-red-950/90 border-red-800 text-red-200' : 'bg-emerald-950/90 border-emerald-800 text-emerald-200']">
+      <svg v-if="toast.isError" class="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+      </svg>
+      <svg v-else class="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <span class="text-sm font-medium leading-relaxed">{{ toast.message }}</span>
+    </div>
   </div>
 </template>
+
+<script setup>
+import { ref, onMounted, nextTick } from 'vue';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+
+// Active Tab
+const activeTab = ref('general');
+
+// App Configuration
+const config = ref({
+  save_dir: '',
+  output_format: 'markdown',
+  compress_quality: 80,
+  max_dimension: 1024,
+  workspace_aware: false,
+  wrap_single_quotes: true,
+  launch_on_boot: true,
+  enable_notifications: true,
+  global_hotkey: 'Alt+V',
+  upload_strategy: 'eager',
+  injection_mode: 'direct',
+  clean_keep_days: 1,
+  ssh: {
+    enabled: false,
+    host: '',
+    port: 22,
+    username: '',
+    remote_dir: '',
+    match_pattern: ''
+  },
+  targets: []
+});
+
+// Logs Container & History
+const logs = ref([]);
+const logContainer = ref(null);
+
+// SSH Testing State
+const testingConnection = ref(false);
+
+// Add/Edit Target Modal State
+const showAddTargetModal = ref(false);
+const editingTargetIndex = ref(null);
+const tempTarget = ref({
+  enabled: true,
+  type: 'ssh',
+  match_pattern: '',
+  host: '',
+  port: 22,
+  username: '',
+  remote_dir: '',
+  local_dir: ''
+});
+
+// Toast Manager
+const toast = ref({
+  show: false,
+  message: '',
+  isError: false
+});
+
+const showToast = (msg, isErr = false) => {
+  toast.value.message = msg;
+  toast.value.isError = isErr;
+  toast.value.show = true;
+  setTimeout(() => {
+    toast.value.show = false;
+  }, 4000);
+};
+
+// Load Configurations
+const loadConfig = async () => {
+  try {
+    const data = await invoke('get_config');
+    // Ensure all subfields exist to avoid null errors
+    if (!data.ssh) {
+      data.ssh = { enabled: false, host: '', port: 22, username: '', remote_dir: '', match_pattern: '' };
+    }
+    if (!data.targets) {
+      data.targets = [];
+    }
+    config.value = data;
+  } catch (err) {
+    showToast(`Failed to load configuration: ${err}`, true);
+  }
+};
+
+// Save Configurations
+const saveSettings = async () => {
+  try {
+    await invoke('save_config', { config: config.value });
+    showToast('Settings saved successfully!');
+  } catch (err) {
+    showToast(`Failed to save settings: ${err}`, true);
+  }
+};
+
+// Check SSH connection
+const checkSSHConnection = async () => {
+  testingConnection.value = true;
+  try {
+    const res = await invoke('test_connection', {
+      host: config.value.ssh.host,
+      port: config.value.ssh.port || null,
+      username: config.value.ssh.username || null
+    });
+    showToast(res);
+  } catch (err) {
+    showToast(`Connection failed: ${err}`, true);
+  } finally {
+    testingConnection.value = false;
+  }
+};
+
+// Edit Custom Target
+const editTarget = (index) => {
+  editingTargetIndex.value = index;
+  const target = config.value.targets[index];
+  tempTarget.value = { ...target };
+  showAddTargetModal.value = true;
+};
+
+// Delete Custom Target
+const deleteTarget = (index) => {
+  config.value.targets.splice(index, 1);
+  showToast('Target deleted.');
+};
+
+// Save Custom Target (add or edit)
+const saveTarget = () => {
+  if (!tempTarget.value.match_pattern.trim()) {
+    showToast('Match pattern cannot be empty.', true);
+    return;
+  }
+
+  if (editingTargetIndex.value !== null) {
+    config.value.targets[editingTargetIndex.value] = { ...tempTarget.value };
+  } else {
+    config.value.targets.push({ ...tempTarget.value });
+  }
+  
+  closeTargetModal();
+  showToast('Target updated.');
+};
+
+// Close modal & reset tempTarget
+const closeTargetModal = () => {
+  showAddTargetModal.value = false;
+  editingTargetIndex.value = null;
+  tempTarget.value = {
+    enabled: true,
+    type: 'ssh',
+    match_pattern: '',
+    host: '',
+    port: 22,
+    username: '',
+    remote_dir: '',
+    local_dir: ''
+  };
+};
+
+// Fetch initial log history and setup listener
+const setupLogs = async () => {
+  try {
+    const history = await invoke('get_log_history');
+    logs.value = history;
+    scrollLogsToBottom();
+  } catch (err) {
+    console.error('Failed to load log history:', err);
+  }
+
+  // Listen to new log append events
+  await listen('log_append', (event) => {
+    logs.value.push(event.payload);
+    if (logs.value.length > 200) {
+      logs.value.shift();
+    }
+    scrollLogsToBottom();
+  });
+};
+
+const scrollLogsToBottom = () => {
+  nextTick(() => {
+    if (logContainer.value) {
+      logContainer.value.scrollTop = logContainer.value.scrollHeight;
+    }
+  });
+};
+
+onMounted(() => {
+  loadConfig();
+  setupLogs();
+});
+</script>
+
+<style>
+/* Custom styled range slider */
+input[type="range"]::-webkit-slider-thumb {
+  height: 16px;
+  width: 16px;
+  border-radius: 50%;
+  background: #f97316;
+  cursor: pointer;
+  -webkit-appearance: none;
+  margin-top: -4px;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 8px;
+  cursor: pointer;
+  background: #020617;
+  border-radius: 4px;
+  border: 1px border #1e293b;
+}
+</style>

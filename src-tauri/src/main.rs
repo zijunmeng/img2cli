@@ -7,6 +7,8 @@ mod injector;
 
 use config::AppConfig;
 use tauri::Manager;
+use tauri::menu::{MenuBuilder, MenuItem};
+use tauri::tray::TrayIconBuilder;
 
 #[tauri::command]
 fn get_config(state: tauri::State<'_, daemon::DaemonState>) -> Result<AppConfig, String> {
@@ -181,6 +183,13 @@ fn main() {
                 }
             })
             .build())
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // Intercept close events to hide the Settings window instead of exiting
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
         .setup(|app| {
             // Ensure configuration exists safely
             let path = AppConfig::config_file_path();
@@ -227,6 +236,29 @@ fn main() {
             
             app.manage(daemon_state);
             
+            // Build the system tray and context menu
+            let show_i = MenuItem::with_id(app, "show", "Show Settings", true, None::<&str>)?;
+            let exit_i = MenuItem::with_id(app, "exit", "Exit", true, None::<&str>)?;
+            let menu = MenuBuilder::new(app).item(&show_i).item(&exit_i).build()?;
+            
+            let icon = app.default_window_icon().cloned().unwrap();
+            let _tray = TrayIconBuilder::with_id("main-tray")
+                .icon(icon)
+                .menu(&menu)
+                .on_menu_event(|app, event| {
+                    match event.id().as_ref() {
+                        "show" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                        "exit" => app.exit(0),
+                        _ => {}
+                    }
+                })
+                .build(app)?;
+
             let window = app.get_webview_window("main").unwrap();
             let _ = window.hide();
             Ok(())
