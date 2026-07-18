@@ -12,6 +12,8 @@ pub struct SshConfig {
     pub remote_dir: String,
     #[serde(default)]
     pub match_pattern: Option<String>,
+    #[serde(default)]
+    pub remember_password: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -25,6 +27,8 @@ pub struct TargetConfig {
     pub username: Option<String>,
     pub remote_dir: Option<String>,
     pub local_dir: Option<String>,
+    #[serde(default)]
+    pub remember_password: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -49,6 +53,8 @@ pub struct Config {
     pub enable_notifications: bool,
     #[serde(default = "default_global_hotkey")]
     pub global_hotkey: String,
+    #[serde(default = "default_screenshot_hotkey")]
+    pub screenshot_hotkey: String,
     #[serde(default = "default_upload_strategy")]
     pub upload_strategy: String,
     #[serde(default = "default_injection_mode")]
@@ -71,6 +77,7 @@ fn default_wrap_single_quotes() -> bool { true }
 fn default_launch_on_boot() -> bool { true }
 fn default_enable_notifications() -> bool { true }
 fn default_global_hotkey() -> String { "Alt+V".to_string() }
+fn default_screenshot_hotkey() -> String { "Alt+Shift+S".to_string() }
 fn default_upload_strategy() -> String { "eager".to_string() }
 fn default_injection_mode() -> String { "direct".to_string() }
 fn default_clean_keep_days() -> u32 { 1 }
@@ -87,6 +94,7 @@ impl Default for Config {
             launch_on_boot: default_launch_on_boot(),
             enable_notifications: default_enable_notifications(),
             global_hotkey: default_global_hotkey(),
+            screenshot_hotkey: default_screenshot_hotkey(),
             upload_strategy: default_upload_strategy(),
             injection_mode: default_injection_mode(),
             clean_keep_days: default_clean_keep_days(),
@@ -97,6 +105,7 @@ impl Default for Config {
                 username: Some("your_username".to_string()),
                 remote_dir: "/tmp/img2cli".to_string(),
                 match_pattern: None,
+                remember_password: true,
             }),
             ssh_targets: None,
             targets: None,

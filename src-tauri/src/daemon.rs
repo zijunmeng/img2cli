@@ -350,6 +350,7 @@ pub fn trigger_capture_and_paste(app_handle: &AppHandle, state: &DaemonState) {
                                         username: Some(h.username),
                                         remote_dir: default_remote,
                                         match_pattern: Some(h.alias),
+                                        remember_password: true,
                                     });
                                 }
                             }
@@ -371,6 +372,7 @@ pub fn trigger_capture_and_paste(app_handle: &AppHandle, state: &DaemonState) {
                                 username: target.username,
                                 remote_dir: target.remote_dir.unwrap_or_else(|| "/tmp/img2cli".to_string()),
                                 match_pattern: Some(target.match_pattern),
+                                remember_password: target.remember_password.unwrap_or(true),
                             });
                         }
                         "local" => {

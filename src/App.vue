@@ -15,14 +15,10 @@
     <div class="relative z-10 w-64 bg-white/[0.04] backdrop-blur-2xl border-r border-white/10 flex flex-col shrink-0">
       <div>
         <div class="p-6 border-b border-white/10 flex items-center gap-3">
-          <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-orange-500 to-amber-500 flex items-center justify-center shadow-lg shadow-orange-500/20">
-            <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          </div>
+          <img src="./assets/logo.png" class="w-8 h-8 rounded-lg shadow-lg shadow-orange-500/10 object-contain" alt="img2cli Logo" />
           <div>
             <h1 class="text-lg font-bold bg-gradient-to-r from-orange-400 to-amber-400 bg-clip-text text-transparent">img2cli</h1>
-            <p class="text-xs text-slate-500">Settings v0.3.0</p>
+            <p class="text-xs text-slate-500">Settings v0.3.4</p>
           </div>
         </div>
 
@@ -107,12 +103,20 @@
               <h3 class="text-sm font-semibold uppercase text-slate-500 tracking-wider">System Integration</h3>
 
               <div>
-                <label class="block text-xs font-semibold text-slate-400 mb-1">Global Hotkey <span class="text-slate-600 normal-case font-normal">(click & press keys)</span></label>
-                <input type="text" readonly :value="recordingHotkey ? 'Press a key combo… (Esc to cancel)' : config.global_hotkey" @focus="recordingHotkey = true" @blur="recordingHotkey = false" @keydown="recordHotkeyKeydown" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200 font-mono cursor-pointer" />
+                <label class="block text-xs font-semibold text-slate-400 mb-1">
+                  Global Hotkey 
+                  <span v-if="recordingHotkey" class="text-orange-400 font-bold ml-1 animate-pulse">(Recording...)</span>
+                  <span v-else class="text-slate-600 normal-case font-normal ml-1">(click & press keys)</span>
+                </label>
+                <input type="text" readonly :value="config.global_hotkey" @focus="recordingHotkey = true" @blur="recordingHotkey = false" @keydown="recordHotkeyKeydown" :class="['w-full bg-slate-950 border rounded-xl px-3 py-2 text-sm focus:outline-none text-slate-200 font-mono cursor-pointer transition-all', recordingHotkey ? 'border-orange-500 shadow-[0_0_0_2px_rgba(249,115,22,0.2)]' : 'border-slate-800 focus:border-orange-500']" />
               </div>
               <div>
-                <label class="block text-xs font-semibold text-slate-400 mb-1">Screenshot Hotkey <span class="text-slate-600 normal-case font-normal">(region capture)</span></label>
-                <input type="text" readonly :value="recordingShot ? 'Press a key combo… (Esc to cancel)' : config.screenshot_hotkey" @focus="recordingShot = true" @blur="recordingShot = false" @keydown="recordShotKeydown" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200 font-mono cursor-pointer" />
+                <label class="block text-xs font-semibold text-slate-400 mb-1">
+                  Screenshot Hotkey 
+                  <span v-if="recordingShot" class="text-orange-400 font-bold ml-1 animate-pulse">(Recording...)</span>
+                  <span v-else class="text-slate-600 normal-case font-normal ml-1">(region capture)</span>
+                </label>
+                <input type="text" readonly :value="config.screenshot_hotkey" @focus="recordingShot = true" @blur="recordingShot = false" @keydown="recordShotKeydown" :class="['w-full bg-slate-950 border rounded-xl px-3 py-2 text-sm focus:outline-none text-slate-200 font-mono cursor-pointer transition-all', recordingShot ? 'border-orange-500 shadow-[0_0_0_2px_rgba(249,115,22,0.2)]' : 'border-slate-800 focus:border-orange-500']" />
               </div>
 
               <div>
@@ -199,7 +203,11 @@
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label class="block text-xs font-semibold text-slate-400 mb-1">Host (IP / Alias)</label>
+                <label class="block text-xs font-semibold text-slate-400 mb-1">Host Name</label>
+                <input type="text" v-model="config.ssh.match_pattern" :disabled="!config.ssh.enabled" placeholder="e.g. My GPU Server" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200 disabled:opacity-50" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1">Host IP / Address</label>
                 <input type="text" v-model="config.ssh.host" :disabled="!config.ssh.enabled" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200 disabled:opacity-50" />
               </div>
               <div>
@@ -210,13 +218,17 @@
                 <label class="block text-xs font-semibold text-slate-400 mb-1">Username</label>
                 <input type="text" v-model="config.ssh.username" :disabled="!config.ssh.enabled" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200 disabled:opacity-50" />
               </div>
-              <div>
+              <div class="md:col-span-2">
                 <label class="block text-xs font-semibold text-slate-400 mb-1">Remote Copy Destination Folder</label>
                 <input type="text" v-model="config.ssh.remote_dir" :disabled="!config.ssh.enabled" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200 disabled:opacity-50" />
               </div>
               <div>
                 <label class="block text-xs font-semibold text-slate-400 mb-1">Password <span class="text-slate-600 normal-case font-normal">(OS keyring)</span></label>
                 <input type="password" v-model="defaultPassword" :disabled="!config.ssh.enabled" :placeholder="defaultHasPassword ? '●●●●●● (saved) — type a new one to update' : 'blank: uses your SSH key (~/.ssh)'" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200 disabled:opacity-50" />
+                <div class="flex items-center gap-2 mt-1.5">
+                  <input type="checkbox" id="default-remember-pwd" v-model="config.ssh.remember_password" :disabled="!config.ssh.enabled" class="accent-orange-500 rounded bg-slate-950 border-slate-800" />
+                  <label for="default-remember-pwd" class="text-xs font-medium text-slate-400 cursor-pointer select-none">Remember Password (OS Keyring)</label>
+                </div>
                 <div class="text-[11px] mt-1 flex items-center gap-2">
                   <template v-if="defaultHasPassword">
                     <span class="text-emerald-400">✓ Password saved (keyring)</span>
@@ -271,32 +283,32 @@
               <table class="w-full text-left border-collapse">
                 <thead>
                   <tr class="border-b border-slate-850 text-xs font-semibold text-slate-500">
-                    <th class="py-3 px-4 text-center">Status</th>
-                    <th class="py-3 px-4 text-center">Match Pattern</th>
-                    <th class="py-3 px-4 text-center">Type</th>
-                    <th class="py-3 px-4 text-center">Details</th>
-                    <th class="py-3 px-4 text-center">Actions</th>
+                    <th class="w-16 py-3 px-4 text-center">Status</th>
+                    <th class="w-40 py-3 px-4 text-left">Host Name / Alias</th>
+                    <th class="w-24 py-3 px-4 text-center">Type</th>
+                    <th class="py-3 px-4 text-left">Details</th>
+                    <th class="w-56 py-3 px-4 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-800/40 text-sm">
                   <tr v-for="(target, idx) in (config.targets || [])" :key="idx" class="hover:bg-slate-900/20">
-                    <td class="py-3 px-4">
+                    <td class="py-3 px-4 text-center">
                       <label class="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" v-model="target.enabled" class="sr-only peer" />
                         <div class="w-9 h-5 bg-slate-800 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-slate-300 after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500"></div>
                       </label>
                     </td>
-                    <td class="py-3 px-4 font-semibold text-slate-200">{{ target.match_pattern }}</td>
-                    <td class="py-3 px-4">
+                    <td class="py-3 px-4 font-semibold text-slate-200 max-w-[10rem] truncate">{{ target.match_pattern }}</td>
+                    <td class="py-3 px-4 text-center">
                       <span :class="['px-2 py-0.5 rounded-md text-xs font-semibold uppercase', target.type === 'ssh' ? 'bg-orange-500/10 text-orange-400 border border-orange-500/25' : 'bg-amber-500/10 text-amber-400 border border-amber-500/25']">
                         {{ target.type }}
                       </span>
                     </td>
-                    <td class="py-3 px-4 text-xs text-slate-400 max-w-[16rem]">
-                      <span v-if="target.type === 'ssh'" class="block truncate">{{ target.username }}@{{ target.host }}:{{ target.remote_dir }}</span>
-                      <span v-else class="block truncate">{{ target.local_dir }}</span>
+                    <td class="py-3 px-4 text-xs text-slate-400 max-w-[28rem] truncate">
+                      <span v-if="target.type === 'ssh'" class="block truncate" :title="`${target.username}@${target.host}:${target.remote_dir}`">{{ target.username }}@{{ target.host }}:{{ target.remote_dir }}</span>
+                      <span v-else class="block truncate" :title="target.local_dir">{{ target.local_dir }}</span>
                     </td>
-                    <td class="py-3 px-4">
+                    <td class="py-3 px-4 text-center">
                       <div class="flex items-center justify-center gap-1.5">
                         <button v-if="target.type === 'ssh'" @click="setAsDefault(idx)" class="px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-orange-500/10 text-orange-400 border border-orange-500/25 hover:bg-orange-500/20 transition-colors">Set Default</button>
                         <button @click="editTarget(idx)" class="px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-slate-400/10 text-slate-300 border border-slate-400/25 hover:bg-slate-400/20 transition-colors">Edit</button>
@@ -357,15 +369,15 @@
               </select>
             </div>
             <div>
-              <label class="block text-xs font-semibold text-slate-400 mb-1">Active Window Match Pattern</label>
-              <input type="text" v-model="tempTarget.match_pattern" placeholder="e.g. S90, WSL" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200" />
+              <label class="block text-xs font-semibold text-slate-400 mb-1">Host Name / Alias</label>
+              <input type="text" v-model="tempTarget.match_pattern" placeholder="e.g. GPU-90, WSL" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200" />
             </div>
           </div>
 
           <!-- SSH Target Fields -->
           <div v-if="tempTarget.type === 'ssh'" class="grid grid-cols-2 gap-3">
             <div>
-              <label class="block text-xs font-semibold text-slate-400 mb-1">Host (IP / Alias)</label>
+              <label class="block text-xs font-semibold text-slate-400 mb-1">Host IP / Address</label>
               <input type="text" v-model="tempTarget.host" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200" />
             </div>
             <div>
@@ -383,6 +395,10 @@
             <div>
               <label class="block text-xs font-semibold text-slate-400 mb-1">Password <span class="text-slate-600 normal-case font-normal">(OS keyring)</span></label>
               <input type="password" v-model="tempTarget.password" :placeholder="tempTargetHasPassword ? '●●●●●● (saved) — type a new one to update' : 'blank: uses your SSH key (~/.ssh)'" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500 text-slate-200" />
+              <div class="flex items-center gap-2 mt-1.5">
+                <input type="checkbox" id="target-remember-pwd" v-model="tempTarget.remember_password" class="accent-orange-500 rounded bg-slate-950 border-slate-800" />
+                <label for="target-remember-pwd" class="text-xs font-medium text-slate-400 cursor-pointer select-none">Remember Password (OS Keyring)</label>
+              </div>
               <div class="text-[11px] mt-1 flex items-center gap-2">
                 <template v-if="tempTargetHasPassword">
                   <span class="text-emerald-400">✓ Password saved (keyring)</span>
@@ -607,8 +623,21 @@ const toggleAllSsh = (val) => {
 const importSshSelected = () => {
   const remoteDir = config.value.ssh?.remote_dir || '/tmp/img2cli';
   let added = 0;
+  let skipped = 0;
   sshHosts.value.forEach((h, i) => {
     if (!sshSelected.value[i]) return;
+    
+    // Deduplicate: check if there's already a target with the same type and match_pattern
+    const exists = config.value.targets.some(t => 
+      t.type === 'ssh' && 
+      t.match_pattern.toLowerCase() === h.alias.toLowerCase()
+    );
+    
+    if (exists) {
+      skipped += 1;
+      return;
+    }
+    
     config.value.targets.push({
       enabled: true,
       type: 'ssh',
@@ -617,12 +646,17 @@ const importSshSelected = () => {
       port: h.port,
       username: h.username,
       remote_dir: remoteDir,
-      local_dir: ''
+      local_dir: '',
+      remember_password: true
     });
     added += 1;
   });
   closeSshModal();
-  showToast(`Imported ${added} host(s) as router targets.`);
+  if (skipped > 0) {
+    showToast(`Imported ${added} host(s), skipped ${skipped} duplicate(s) as router targets.`);
+  } else {
+    showToast(`Imported ${added} host(s) as router targets.`);
+  }
 };
 
 // Copy a router target's SSH host into the default host configuration
@@ -646,10 +680,18 @@ const loadConfig = async () => {
     const data = await invoke('get_config');
     // Ensure all subfields exist to avoid null errors
     if (!data.ssh) {
-      data.ssh = { enabled: false, host: '', port: 22, username: '', remote_dir: '', match_pattern: '' };
+      data.ssh = { enabled: false, host: '', port: 22, username: '', remote_dir: '', match_pattern: '', remember_password: true };
+    } else if (data.ssh.remember_password === undefined) {
+      data.ssh.remember_password = true; // default to true if missing
     }
     if (!data.targets) {
       data.targets = [];
+    } else {
+      data.targets.forEach(t => {
+        if (t.remember_password === undefined) {
+          t.remember_password = true; // default to true if missing
+        }
+      });
     }
     config.value = data;
     if (data.ssh && data.ssh.host) {
@@ -669,17 +711,24 @@ const loadConfig = async () => {
 // Save Configurations
 const saveSettings = async () => {
   try {
-    // Save default SSH password to the OS keyring (if provided), then drop it
-    // so it never lands in config.toml.
-    if (defaultPassword.value && config.value.ssh) {
-      await invoke('set_ssh_password', {
-        user: config.value.ssh.username || '',
-        host: config.value.ssh.host || '',
-        port: config.value.ssh.port || null,
-        password: defaultPassword.value
-      });
-      defaultHasPassword.value = true;
-      defaultPassword.value = '';
+    // If remember_password is true, save password to system keyring.
+    // If remember_password is false, delete password from system keyring.
+    if (config.value.ssh) {
+      const user = config.value.ssh.username || '';
+      const host = config.value.ssh.host || '';
+      const port = config.value.ssh.port || null;
+      
+      if (config.value.ssh.remember_password) {
+        if (defaultPassword.value) {
+          await invoke('set_ssh_password', { user, host, port, password: defaultPassword.value });
+          defaultHasPassword.value = true;
+          defaultPassword.value = '';
+        }
+      } else {
+        await invoke('clear_ssh_password', { user, host, port });
+        defaultHasPassword.value = false;
+        defaultPassword.value = '';
+      }
     }
     await invoke('save_config', { config: config.value });
     showToast('Settings saved successfully!');
@@ -710,16 +759,31 @@ const checkSSHConnection = async () => {
 const recordHotkeyKeydown = (e) => {
   if (!recordingHotkey.value) return;
   e.preventDefault();
-  if (e.key === 'Escape') { e.target.blur(); return; } // exit (re-click to record again)
-  if (['Alt', 'Control', 'Shift', 'Meta'].includes(e.key)) return; // wait for a real key
+  if (e.key === 'Escape') { e.target.blur(); return; }
+  
   const mods = [];
-  if (e.altKey) mods.push('Alt');
   if (e.ctrlKey) mods.push('Control');
+  if (e.altKey) mods.push('Alt');
   if (e.shiftKey) mods.push('Shift');
   if (e.metaKey) mods.push('Super');
-  let key = e.key.length === 1 ? e.key.toUpperCase() : (e.key === ' ' ? 'Space' : e.key);
-  config.value.global_hotkey = [...mods, key].join('+');
-  // stay armed while focused: press another combo to change again; Esc or click away to finish
+
+  if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) {
+    config.value.global_hotkey = mods.join('+');
+    return;
+  }
+
+  let key = e.key;
+  if (key === ' ') {
+    key = 'Space';
+  } else if (key.length === 1) {
+    key = key.toUpperCase();
+  } else {
+    key = key.charAt(0).toUpperCase() + key.slice(1);
+  }
+
+  mods.push(key);
+  config.value.global_hotkey = mods.join('+');
+  e.target.blur();
 };
 
 // ---- Screenshot (region-capture) hotkey recorder ----
@@ -728,14 +792,30 @@ const recordShotKeydown = (e) => {
   if (!recordingShot.value) return;
   e.preventDefault();
   if (e.key === 'Escape') { e.target.blur(); return; }
-  if (['Alt', 'Control', 'Shift', 'Meta'].includes(e.key)) return;
+
   const mods = [];
-  if (e.altKey) mods.push('Alt');
   if (e.ctrlKey) mods.push('Control');
+  if (e.altKey) mods.push('Alt');
   if (e.shiftKey) mods.push('Shift');
   if (e.metaKey) mods.push('Super');
-  let key = e.key.length === 1 ? e.key.toUpperCase() : (e.key === ' ' ? 'Space' : e.key);
-  config.value.screenshot_hotkey = [...mods, key].join('+');
+
+  if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) {
+    config.value.screenshot_hotkey = mods.join('+');
+    return;
+  }
+
+  let key = e.key;
+  if (key === ' ') {
+    key = 'Space';
+  } else if (key.length === 1) {
+    key = key.toUpperCase();
+  } else {
+    key = key.charAt(0).toUpperCase() + key.slice(1);
+  }
+
+  mods.push(key);
+  config.value.screenshot_hotkey = mods.join('+');
+  e.target.blur();
 };
 
 // ---- Region-capture overlay (the ?capture=1 window) ----
@@ -786,7 +866,11 @@ const clearTargetPassword = async () => {
 const editTarget = async (index) => {
   editingTargetIndex.value = index;
   const target = config.value.targets[index];
-  tempTarget.value = { ...target, password: '' };
+  tempTarget.value = { 
+    ...target, 
+    password: '',
+    remember_password: target.remember_password !== undefined ? target.remember_password : true
+  };
   tempTargetHasPassword.value = (target.type === 'ssh')
     ? await invoke('has_ssh_password', { user: target.username || '', host: target.host || '', port: target.port || null }).catch(() => false)
     : false;
@@ -814,24 +898,41 @@ const saveTarget = async () => {
     config.value.targets.push(targetData);
   }
 
-  let pwStored = false;
-  if (password) {
-    try {
-      await invoke('set_ssh_password', {
-        user: targetData.username || '',
-        host: targetData.host || '',
-        port: targetData.port || null,
-        password
-      });
-      tempTargetHasPassword.value = true;
-      pwStored = true;
-    } catch (err) {
-      showToast(`Saved target, but password not stored: ${err}`, true);
+  let pwAction = ''; // 'stored', 'cleared', or ''
+  if (targetData.type === 'ssh') {
+    const user = targetData.username || '';
+    const host = targetData.host || '';
+    const port = targetData.port || null;
+    
+    if (tempTarget.value.remember_password) {
+      if (password) {
+        try {
+          await invoke('set_ssh_password', { user, host, port, password });
+          tempTargetHasPassword.value = true;
+          pwAction = 'stored';
+        } catch (err) {
+          showToast(`Saved target, but password not stored: ${err}`, true);
+        }
+      }
+    } else {
+      try {
+        await invoke('clear_ssh_password', { user, host, port });
+        tempTargetHasPassword.value = false;
+        pwAction = 'cleared';
+      } catch (err) {
+        console.error('Failed to clear target password from keyring:', err);
+      }
     }
   }
 
   closeTargetModal();
-  showToast(pwStored ? 'Target saved · password stored in keyring' : 'Target updated.');
+  if (pwAction === 'stored') {
+    showToast('Target saved · password stored in keyring');
+  } else if (pwAction === 'cleared') {
+    showToast('Target saved · password cleared from keyring');
+  } else {
+    showToast('Target updated.');
+  }
 };
 
 // Close modal & reset tempTarget
@@ -847,7 +948,8 @@ const closeTargetModal = () => {
     username: '',
     remote_dir: '',
     local_dir: '',
-    password: ''
+    password: '',
+    remember_password: true
   };
 };
 

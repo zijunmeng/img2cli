@@ -12,6 +12,8 @@ pub struct SshConfig {
     pub remote_dir: String,
     #[serde(default)]
     pub match_pattern: Option<String>,
+    #[serde(default)]
+    pub remember_password: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -25,6 +27,8 @@ pub struct TargetConfig {
     pub username: Option<String>,
     pub remote_dir: Option<String>,
     pub local_dir: Option<String>,
+    #[serde(default)]
+    pub remember_password: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -101,6 +105,7 @@ impl Default for AppConfig {
                 username: Some("your_username".to_string()),
                 remote_dir: "/tmp/img2cli".to_string(),
                 match_pattern: None,
+                remember_password: true,
             }),
             ssh_targets: None,
             targets: None,

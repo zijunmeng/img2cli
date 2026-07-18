@@ -271,6 +271,7 @@ pub fn parse_ssh_config() -> Vec<crate::config::SshConfig> {
                         username: None,
                         remote_dir: "/tmp/img2cli".to_string(),
                         match_pattern: Some(host_name),
+                        remember_password: true,
                     });
                 }
             } else if let Some(ref mut h) = current_host {

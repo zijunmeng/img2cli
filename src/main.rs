@@ -190,6 +190,7 @@ fn main() {
                             username: username_opt,
                             remote_dir,
                             match_pattern: pattern_opt,
+                            remember_password: true,
                         };
                         
                         let mut targets = current_config.ssh_targets.clone().unwrap_or_default();
@@ -326,6 +327,7 @@ fn main() {
                                         username: user_val,
                                         remote_dir: remote_dir_val,
                                         match_pattern: pattern_val,
+                                        remember_password: ssh.remember_password,
                                     };
                                     
                                     if config_type == "default" {
