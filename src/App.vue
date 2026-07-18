@@ -18,7 +18,7 @@
           <img src="./assets/logo.png" class="w-8 h-8 rounded-lg shadow-lg shadow-orange-500/10 object-contain" alt="img2cli Logo" />
           <div>
             <h1 class="text-lg font-bold bg-gradient-to-r from-orange-400 to-amber-400 bg-clip-text text-transparent">img2cli</h1>
-            <p class="text-xs text-slate-500">Settings v0.3.4</p>
+            <p class="text-xs text-slate-500">Settings v0.3.5</p>
           </div>
         </div>
 
