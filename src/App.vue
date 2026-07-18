@@ -2,7 +2,7 @@
   <!-- Region-capture overlay (screenshot hotkey opens index.html?capture=1) -->
   <div v-if="captureMode" class="fixed inset-0 z-[9999] cursor-crosshair select-none" style="background: rgba(0,0,0,0.28)" @mousedown="capDown" @mousemove="capMove" @mouseup="capUp">
     <div class="absolute top-5 left-1/2 -translate-x-1/2 text-white text-sm bg-black/70 px-4 py-1.5 rounded-full pointer-events-none shadow-lg">Drag to select a region · Esc to cancel</div>
-    <div v-if="cap.active" :style="capRectStyle" class="absolute border-2 border-orange-400 pointer-events-none" style="background: rgba(249,115,22,0.12); box-shadow: 0 0 0 9999px rgba(0,0,0,0.4)"></div>
+    <div v-if="cap.active" :style="capRectStyle" class="absolute border-2 border-orange-400 pointer-events-none" style="background: transparent; box-shadow: 0 0 0 9999px rgba(0,0,0,0.4)"></div>
   </div>
   <div v-else class="relative flex h-screen text-slate-100 font-sans overflow-hidden bg-[#0a0b1e]">
     <!-- Ambient background glows (give the frosted glass something to blur) -->
@@ -104,11 +104,14 @@
 
               <div>
                 <label class="block text-xs font-semibold text-slate-400 mb-1">
-                  Global Hotkey 
+                  Paste Hotkey 
                   <span v-if="recordingHotkey" class="text-orange-400 font-bold ml-1 animate-pulse">(Recording...)</span>
                   <span v-else class="text-slate-600 normal-case font-normal ml-1">(click & press keys)</span>
                 </label>
-                <input type="text" readonly :value="config.global_hotkey" @focus="recordingHotkey = true" @blur="recordingHotkey = false" @keydown="recordHotkeyKeydown" :class="['w-full bg-slate-950 border rounded-xl px-3 py-2 text-sm focus:outline-none text-slate-200 font-mono cursor-pointer transition-all', recordingHotkey ? 'border-orange-500 shadow-[0_0_0_2px_rgba(249,115,22,0.2)]' : 'border-slate-800 focus:border-orange-500']" />
+                <div class="flex gap-2">
+                  <input type="text" readonly :value="config.global_hotkey" @focus="recordingHotkey = true" @blur="recordingHotkey = false" @keydown="recordHotkeyKeydown" :class="['flex-1 bg-slate-950 border rounded-xl px-3 py-2 text-sm focus:outline-none text-slate-200 font-mono cursor-pointer transition-all', recordingHotkey ? 'border-orange-500 shadow-[0_0_0_2px_rgba(249,115,22,0.2)]' : 'border-slate-800 focus:border-orange-500']" />
+                  <button type="button" @click="config.global_hotkey = 'Alt+V'" class="px-3 py-2 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors border border-slate-700">Reset</button>
+                </div>
               </div>
               <div>
                 <label class="block text-xs font-semibold text-slate-400 mb-1">
@@ -116,7 +119,10 @@
                   <span v-if="recordingShot" class="text-orange-400 font-bold ml-1 animate-pulse">(Recording...)</span>
                   <span v-else class="text-slate-600 normal-case font-normal ml-1">(region capture)</span>
                 </label>
-                <input type="text" readonly :value="config.screenshot_hotkey" @focus="recordingShot = true" @blur="recordingShot = false" @keydown="recordShotKeydown" :class="['w-full bg-slate-950 border rounded-xl px-3 py-2 text-sm focus:outline-none text-slate-200 font-mono cursor-pointer transition-all', recordingShot ? 'border-orange-500 shadow-[0_0_0_2px_rgba(249,115,22,0.2)]' : 'border-slate-800 focus:border-orange-500']" />
+                <div class="flex gap-2">
+                  <input type="text" readonly :value="config.screenshot_hotkey" @focus="recordingShot = true" @blur="recordingShot = false" @keydown="recordShotKeydown" :class="['flex-1 bg-slate-950 border rounded-xl px-3 py-2 text-sm focus:outline-none text-slate-200 font-mono cursor-pointer transition-all', recordingShot ? 'border-orange-500 shadow-[0_0_0_2px_rgba(249,115,22,0.2)]' : 'border-slate-800 focus:border-orange-500']" />
+                  <button type="button" @click="config.screenshot_hotkey = 'Alt+Shift+S'" class="px-3 py-2 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors border border-slate-700">Reset</button>
+                </div>
               </div>
 
               <div>
@@ -470,13 +476,25 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, computed } from 'vue';
+import { ref, onMounted, nextTick, computed, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 
 // Active Tab
 const activeTab = ref('general');
+
+watch(activeTab, (newTab) => {
+  // If the user navigates away or switches tabs, revert the unsaved hotkeys to the last saved values
+  if (config.value) {
+    if (lastSavedGlobalHotkey.value) {
+      config.value.global_hotkey = lastSavedGlobalHotkey.value;
+    }
+    if (lastSavedScreenshotHotkey.value) {
+      config.value.screenshot_hotkey = lastSavedScreenshotHotkey.value;
+    }
+  }
+});
 
 // App Configuration
 const config = ref({
@@ -531,6 +549,8 @@ const defaultPassword = ref('');
 const defaultHasPassword = ref(false);
 const tempTargetHasPassword = ref(false);
 const recordingHotkey = ref(false);
+const lastSavedGlobalHotkey = ref('');
+const lastSavedScreenshotHotkey = ref('');
 
 // ---- OpenSSH config loader ----
 const sshHosts = ref([]);
@@ -660,7 +680,7 @@ const importSshSelected = () => {
 };
 
 // Copy a router target's SSH host into the default host configuration
-const setAsDefault = (index) => {
+const setAsDefault = async (index) => {
   const t = config.value.targets[index];
   if (!t || t.type !== 'ssh') return;
   config.value.ssh = {
@@ -669,8 +689,24 @@ const setAsDefault = (index) => {
     port: t.port || 22,
     username: t.username || '',
     remote_dir: t.remote_dir || config.value.ssh?.remote_dir || '/tmp/img2cli',
-    match_pattern: config.value.ssh?.match_pattern || ''
+    match_pattern: t.match_pattern || '',
+    remember_password: t.remember_password !== undefined ? t.remember_password : true
   };
+
+  // Clear current password input to avoid inserting password text across hosts
+  defaultPassword.value = '';
+
+  // Check if keyring already contains password for this host to update UI status indicator
+  try {
+    defaultHasPassword.value = await invoke('has_ssh_password', {
+      user: t.username || '',
+      host: t.host || '',
+      port: t.port || null
+    });
+  } catch (_) {
+    defaultHasPassword.value = false;
+  }
+
   showToast(`Set "${t.match_pattern}" as the default SSH host.`);
 };
 
@@ -694,6 +730,8 @@ const loadConfig = async () => {
       });
     }
     config.value = data;
+    lastSavedGlobalHotkey.value = data.global_hotkey || '';
+    lastSavedScreenshotHotkey.value = data.screenshot_hotkey || '';
     if (data.ssh && data.ssh.host) {
       try {
         defaultHasPassword.value = await invoke('has_ssh_password', {
@@ -731,6 +769,8 @@ const saveSettings = async () => {
       }
     }
     await invoke('save_config', { config: config.value });
+    lastSavedGlobalHotkey.value = config.value.global_hotkey;
+    lastSavedScreenshotHotkey.value = config.value.screenshot_hotkey;
     showToast('Settings saved successfully!');
   } catch (err) {
     showToast(`Failed to save settings: ${err}`, true);
