@@ -20,7 +20,7 @@ pub fn capture_full_screen(_app: &AppHandle, state: &DaemonState) -> Result<(), 
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
-        let _ = (app, state);
+        let _ = (_app, state);
         Err("Screenshot capture is not supported on this platform".to_string())
     }
 }
