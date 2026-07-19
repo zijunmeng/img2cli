@@ -8,6 +8,7 @@ pub struct DaemonState {
     pub running: Arc<Mutex<bool>>,
     pub log_history: Arc<Mutex<Vec<String>>>,
     pub config: Arc<RwLock<AppConfig>>,
+    pub captured_image: Arc<std::sync::Mutex<Option<image::RgbaImage>>>,
 }
 
 pub fn log_message(app_handle: &AppHandle, log_history: &Arc<Mutex<Vec<String>>>, message: &str) {
@@ -102,7 +103,12 @@ pub fn start_daemon(app_handle: AppHandle, config: AppConfig) -> DaemonState {
         log_message(&app_clone, &log_history_clone, "Daemon background thread stopped.");
     });
     
-    DaemonState { running, log_history, config: config_lock }
+    DaemonState {
+        running,
+        log_history,
+        config: config_lock,
+        captured_image: Arc::new(std::sync::Mutex::new(None)),
+    }
 }
 
 #[cfg(windows)]

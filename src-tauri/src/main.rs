@@ -306,7 +306,15 @@ fn main() {
                         }
                         if let Ok(ss) = tauri_plugin_global_shortcut::Shortcut::from_str(&cfg_shot) {
                             if shortcut == &ss {
-                                capture::open_capture_overlay(app_handle);
+                                if let Err(e) = capture::capture_full_screen(app_handle, &state) {
+                                    daemon::log_message(
+                                        app_handle,
+                                        &state.log_history,
+                                        &format!("Failed to capture screen: {}", e),
+                                    );
+                                } else {
+                                    capture::open_capture_overlay(app_handle);
+                                }
                             }
                         }
                     }
@@ -428,7 +436,8 @@ fn main() {
             clear_ssh_password,
             has_ssh_password,
             capture::capture_region,
-            capture::cancel_capture
+            capture::cancel_capture,
+            capture::get_captured_image
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

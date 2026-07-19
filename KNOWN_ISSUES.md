@@ -71,3 +71,8 @@ This file tracks current, observable defects, platform limitations, and security
 * **Symptom**: 50ms - 200ms screen freezing flicker when initiating region capture.
 * **Root Cause**: Tauri Webview loads assets and initializes the HTML5 Vue engine after the hotkey is pressed.
 * **Mitigation**: Rust-native pre-emptive screen freezing is planned in [ROADMAP.md](ROADMAP.md).
+
+---
+
+## 6. UI & Design System Alignment Gaps
+* **Gradient Theme Mismatch**: The current GUI interface still uses orange-to-amber gradients (`bg-gradient-to-r from-orange-500 to-amber-500`) and custom styles that deviate from the pure Apple style defined in [DESIGN.md](DESIGN.md). Full visual style migration is scheduled as part of the roadmap.

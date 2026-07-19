@@ -61,6 +61,8 @@ pub struct AppConfig {
     pub injection_mode: String,  // "direct" or "swap"
     #[serde(default = "default_clean_keep_days")]
     pub clean_keep_days: u32,
+    #[serde(default = "default_theme")]
+    pub theme: String,
     
     #[serde(default)]
     pub ssh: Option<SshConfig>,
@@ -81,6 +83,7 @@ fn default_screenshot_hotkey() -> String { "Alt+Shift+S".to_string() }
 fn default_upload_strategy() -> String { "eager".to_string() }
 fn default_injection_mode() -> String { "direct".to_string() }
 fn default_clean_keep_days() -> u32 { 1 }
+fn default_theme() -> String { "apple-dark".to_string() }
 
 impl Default for AppConfig {
     fn default() -> Self {
@@ -98,6 +101,7 @@ impl Default for AppConfig {
             upload_strategy: default_upload_strategy(),
             injection_mode: default_injection_mode(),
             clean_keep_days: default_clean_keep_days(),
+            theme: default_theme(),
             ssh: Some(SshConfig {
                 enabled: false,
                 host: "your_ssh_alias_or_ip".to_string(),

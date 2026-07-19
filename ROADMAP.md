@@ -65,3 +65,14 @@ This file tracks future architecture improvements, user experience features, and
 * **Action**:
   1. Avoid full-blown Webview window instances for pinned frames.
   2. Explore creating lightweight, raw OS-native windows (via Rust `tao` or simple custom Win32/Cocoa window bindings) that render static image frames using CPU/GPU directly, keeping memory footprints under 30MB.
+
+---
+
+## 6. Milestone 5: Apple-Style UI Makeover (Medium-Term)
+
+### A. Theme and Component Realignment
+* **Goal**: Refactor the Settings Webview interface to match the Apple dark mode design system tokens defined in [DESIGN.md](DESIGN.md).
+* **Action**:
+  1. Replace orange-amber gradients (`bg-gradient-to-r from-orange-500 to-amber-500`) with flat Action Blue (`#2997ff`) highlights, borders, and active state changes.
+  2. Implement frosted-glass panels (`backdrop-blur: 24px` over `rgba(255, 255, 255, 0.04)`) for the sidebar and main settings card panels.
+  3. Clean up the typography system to enforce negative letter-spacing on display headings and align table layout styles.

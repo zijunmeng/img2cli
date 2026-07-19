@@ -4,12 +4,34 @@
 
 use std::path::Path;
 use std::sync::Arc;
+use std::sync::OnceLock;
+use tokio::sync::Mutex as TokioMutex;
 
 use russh::{client, ChannelMsg, Disconnect};
 use russh_sftp::client::SftpSession;
 use tokio::io::AsyncWriteExt;
 
 const SERVICE: &str = "img2cli";
+
+static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+
+pub fn get_runtime() -> &'static tokio::runtime::Runtime {
+    RUNTIME.get_or_init(|| {
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("Failed to build static tokio runtime")
+    })
+}
+
+struct CachedConnection {
+    host: String,
+    port: u16,
+    user: String,
+    handle: client::Handle<Handler>,
+}
+
+static ACTIVE_CONNECTION: OnceLock<TokioMutex<Option<CachedConnection>>> = OnceLock::new();
 
 /// Stable identity used as the keyring entry name for a host.
 pub fn identity_key(user: &str, host: &str, port: Option<u16>) -> String {
@@ -101,9 +123,33 @@ pub async fn upload_via_sftp_async(
         .and_then(|f| f.to_str())
         .ok_or_else(|| "Invalid local file name".to_string())?;
 
-    let mut handle = connect_and_auth(&host, port, &user, &password).await?;
+    let pool = ACTIVE_CONNECTION.get_or_init(|| TokioMutex::new(None));
+    let mut lock = pool.lock().await;
 
-    // mkdir -p the remote dir.
+    // 1. Get or create warm connection inside the lock
+    let mut is_healthy = false;
+    if let Some(ref conn) = *lock {
+        if conn.host == host && conn.port == port && conn.user == user {
+            if let Ok(ch) = conn.handle.channel_open_session().await {
+                let _ = ch.close().await;
+                is_healthy = true;
+            }
+        }
+    }
+
+    if !is_healthy {
+        let handle = connect_and_auth(&host, port, &user, &password).await?;
+        *lock = Some(CachedConnection {
+            host: host.clone(),
+            port,
+            user: user.clone(),
+            handle,
+        });
+    }
+
+    let handle = &lock.as_ref().unwrap().handle;
+
+    // 2. mkdir -p the remote dir.
     let mut ch = handle
         .channel_open_session()
         .await
@@ -117,11 +163,11 @@ pub async fn upload_via_sftp_async(
         }
     }
 
-    // SFTP put.
-    let mut sch = handle
+    // 3. SFTP put.
+    let sch = handle
         .channel_open_session()
         .await
-        .map_err(|e| format!("Open channel: {}", e))?;
+        .map_err(|e| format!("Open channel for SFTP: {}", e))?;
     sch.request_subsystem(true, "sftp")
         .await
         .map_err(|e| format!("SFTP subsystem: {}", e))?;
@@ -141,9 +187,7 @@ pub async fn upload_via_sftp_async(
     let _ = file.shutdown().await;
     let _ = sftp.close().await;
 
-    let _ = handle
-        .disconnect(Disconnect::ByApplication, "bye", "en")
-        .await;
+    // NOTE: Connection is kept warm; do not disconnect handle.
     Ok(format!("{}/{}", remote_dir, filename))
 }
 
@@ -154,7 +198,7 @@ pub async fn test_password_async(
     user: String,
     password: String,
 ) -> Result<(), String> {
-    let mut handle = connect_and_auth(&host, port, &user, &password).await?;
+    let handle = connect_and_auth(&host, port, &user, &password).await?;
     let _ = handle
         .disconnect(Disconnect::ByApplication, "bye", "en")
         .await;
@@ -171,10 +215,7 @@ pub fn upload_via_sftp(
     remote_dir: &str,
     local_path: &Path,
 ) -> Result<String, String> {
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|e| format!("Runtime error: {}", e))?;
+    let rt = get_runtime();
     rt.block_on(upload_via_sftp_async(
         host.to_string(),
         port,
