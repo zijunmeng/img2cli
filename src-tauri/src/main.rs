@@ -400,9 +400,7 @@ fn main() {
             }
             let menu = builder.item(&exit_i).build()?;
             
-            let icon = app.default_window_icon().cloned().unwrap();
-            let _tray = TrayIconBuilder::with_id("main-tray")
-                .icon(icon)
+            let mut tray_builder = TrayIconBuilder::with_id("main-tray")
                 .menu(&menu)
                 .on_menu_event(|app, event| {
                     match event.id().as_ref() {
@@ -419,11 +417,17 @@ fn main() {
                         "exit" => app.exit(0),
                         _ => {}
                     }
-                })
-                .build(app)?;
+                });
 
-            let window = app.get_webview_window("main").unwrap();
-            let _ = window.hide();
+            // Set the tray icon if available (default_window_icon may return
+            // None on macOS where per-window icons aren't used).
+            if let Some(icon) = app.default_window_icon() {
+                tray_builder = tray_builder.icon(icon.clone());
+            }
+            let _tray = tray_builder.build(app)?;
+
+            // Window is visible on launch (tauri.conf.json visible: true).
+            // The on_window_event handler hides it to tray on close.
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
