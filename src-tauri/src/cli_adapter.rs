@@ -26,12 +26,32 @@ impl CliAdapter for GenericMarkdownAdapter {
         "generic_markdown"
     }
     fn render(&self, path: &str) -> String {
+        let url = escape_url(path);
         if self.html {
-            format!("<img src=\"{}\" />", path)
+            format!("<img src=\"{}\" />", url)
         } else {
-            format!("![image]({})", path)
+            format!("![image]({})", url)
         }
     }
+}
+
+/// Percent-encode the characters that break a Markdown URL or an HTML
+/// attribute: `)` / `(` (terminate `![...](...)`), space (splits the URL),
+/// `"` (terminates `src="..."`). The common case — timestamp filenames like
+/// `img_20260801_120000_123.jpg` — is byte-for-byte unchanged; this only
+/// matters for user-configured paths containing those characters.
+fn escape_url(path: &str) -> String {
+    let mut out = String::with_capacity(path.len());
+    for c in path.chars() {
+        match c {
+            '(' => out.push_str("%28"),
+            ')' => out.push_str("%29"),
+            ' ' => out.push_str("%20"),
+            '"' => out.push_str("%22"),
+            _ => out.push(c),
+        }
+    }
+    out
 }
 
 /// Bare-path rendering: emit the location verbatim. For CLIs / pipelines that
@@ -91,5 +111,33 @@ mod tests {
     fn adapter_for_is_case_insensitive() {
         assert_eq!(adapter_for("MARKDOWN").name(), "generic_markdown");
         assert_eq!(adapter_for("Html").name(), "generic_markdown");
+    }
+
+    // ── URL escaping (Step 12) ──
+
+    #[test]
+    fn markdown_escapes_url_breakers() {
+        // ')' would terminate ![...](...) early; space splits the URL.
+        let r = GenericMarkdownAdapter { html: false }.render("/tmp/a b)c.jpg");
+        assert_eq!(r, "![image](/tmp/a%20b%29c.jpg)");
+    }
+
+    #[test]
+    fn html_escapes_quote_and_paren() {
+        let r = GenericMarkdownAdapter { html: true }.render("/tmp/a\"b(c.jpg");
+        assert_eq!(r, "<img src=\"/tmp/a%22b%28c.jpg\" />");
+    }
+
+    #[test]
+    fn normal_path_is_unchanged_by_escaping() {
+        // common case (timestamp filenames) must be byte-for-byte identical
+        let r = GenericMarkdownAdapter { html: false }.render("/tmp/img2cli/img_20260801_120000_123.jpg");
+        assert_eq!(r, "![image](/tmp/img2cli/img_20260801_120000_123.jpg)");
+    }
+
+    #[test]
+    fn raw_path_adapter_does_not_escape() {
+        // raw output = literal path, no escaping
+        assert_eq!(GenericRawPathAdapter.render("/tmp/a b)c.jpg"), "/tmp/a b)c.jpg");
     }
 }

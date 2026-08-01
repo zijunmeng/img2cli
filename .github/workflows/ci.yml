@@ -57,6 +57,6 @@ jobs:
       - name: Build frontend (also produces dist/ for tauri-build)
         run: npm run build
 
-      - name: Cargo check (Rust type-check)
+      - name: Cargo check (Rust type-check, incl. tests)
         working-directory: src-tauri
-        run: cargo check
+        run: cargo check --all-targets

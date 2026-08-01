@@ -350,3 +350,56 @@ fn wrap_quotes(s: String, wrap: bool) -> String {
         s
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // JobManager's ordering + bounding come from a bounded `mpsc::sync_channel`
+    // drained by a single worker. `TransferJob` carries an `AppHandle` that
+    // can't be constructed without a running Tauri app, so these tests pin the
+    // CHANNEL + COUNTER guarantees the manager relies on, rather than driving
+    // the real worker end-to-end.
+
+    #[test]
+    fn sync_channel_preserves_submission_order() {
+        // same primitive JobManager uses (mpsc::sync_channel, single receiver)
+        let (tx, rx) = std::sync::mpsc::sync_channel::<u32>(8);
+        for v in [10, 20, 30, 40] {
+            tx.send(v).unwrap();
+        }
+        let received: Vec<u32> = (0..4).map(|_| rx.recv().unwrap()).collect();
+        assert_eq!(received, vec![10, 20, 30, 40], "jobs must dequeue in submission order");
+    }
+
+    #[test]
+    fn sync_channel_rejects_overflow() {
+        let (tx, _rx) = std::sync::mpsc::sync_channel::<u32>(3);
+        for v in 1..=3 {
+            tx.try_send(v).unwrap();
+        }
+        // 4th submit when full → Err(Full); JobManager.submit maps this to
+        // AppError::QueueFull (drops the capture instead of blocking the hotkey).
+        assert!(matches!(tx.try_send(4), Err(TrySendError::Full(_))));
+    }
+
+    #[test]
+    fn queue_capacity_is_a_sane_bound() {
+        // Guard against accidentally making the queue unbounded or absurdly
+        // large/small. The exact value is tunable; the bound must exist.
+        assert!(
+            QUEUE_CAPACITY >= 1 && QUEUE_CAPACITY <= 64,
+            "QUEUE_CAPACITY out of sane range: {}",
+            QUEUE_CAPACITY
+        );
+    }
+
+    #[test]
+    fn job_ids_are_monotonic() {
+        // fetch_add only increases, so consecutive ids always increase — even
+        // under concurrent callers (logs/events stay orderable by job id).
+        let a = next_job_id();
+        let b = next_job_id();
+        assert!(b > a, "job ids must increase ({} > {})", b, a);
+    }
+}
