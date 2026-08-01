@@ -3,6 +3,7 @@
 mod config;
 mod clipboard;
 mod capture;
+mod cli_adapter;
 mod daemon;
 mod injector;
 mod job;

@@ -23,6 +23,7 @@ use std::thread;
 
 use tauri::{AppHandle, Emitter};
 
+use crate::cli_adapter::CliAdapter;
 use crate::config::AppConfig;
 use crate::daemon::{log_message, CapturedArtifact};
 use crate::transport::ArtifactTransport;
@@ -328,7 +329,8 @@ fn process_job(job: &mut TransferJob) -> Result<String, AppError> {
     };
     job.log(&format!("Delivered: {}", delivered.delivered_path));
     let paste_text = wrap_quotes(
-        format_path(&job.config.output_format, &delivered.delivered_path),
+        crate::cli_adapter::adapter_for(&job.config.output_format)
+            .render(&delivered.delivered_path),
         job.config.wrap_single_quotes,
     );
 
@@ -346,14 +348,5 @@ fn wrap_quotes(s: String, wrap: bool) -> String {
         format!("'{}'", s)
     } else {
         s
-    }
-}
-
-/// Wrap a delivered path (remote or local) in the configured output format.
-fn format_path(output_format: &str, path: &str) -> String {
-    match output_format.to_lowercase().as_str() {
-        "markdown" => format!("![image]({})", path),
-        "html" => format!("<img src=\"{}\" />", path),
-        _ => path.to_string(),
     }
 }
