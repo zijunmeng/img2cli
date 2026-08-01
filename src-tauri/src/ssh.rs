@@ -10,7 +10,7 @@ use std::sync::OnceLock;
 use tokio::sync::Mutex as TokioMutex;
 
 use russh::keys::PublicKeyBase64;
-use russh::{client, ChannelMsg, Disconnect};
+use russh::{client, Disconnect};
 use russh_sftp::client::SftpSession;
 use tokio::io::AsyncWriteExt;
 
@@ -170,6 +170,13 @@ impl client::Handler for Handler {
     }
 }
 
+/// Per-phase SFTP timeouts — a stuck/unreachable server must not block the
+/// single job worker indefinitely. Connect and auth each get their own budget;
+/// the whole transfer (SFTP session + mkdir + put) gets a larger one.
+const SFTP_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+const SFTP_AUTH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+const SFTP_TRANSFER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+
 async fn connect_and_auth(
     host: &str,
     port: u16,
@@ -177,21 +184,49 @@ async fn connect_and_auth(
     password: &str,
 ) -> Result<client::Handle<Handler>, String> {
     let config = Arc::new(client::Config::default());
-    let mut handle = client::connect(
-        config,
-        (host, port),
-        Handler { host: host.to_string(), port },
+    let mut handle = tokio::time::timeout(
+        SFTP_CONNECT_TIMEOUT,
+        client::connect(config, (host, port), Handler { host: host.to_string(), port }),
     )
     .await
+    .map_err(|_| format!("SFTP connect timed out after {}s", SFTP_CONNECT_TIMEOUT.as_secs()))?
     .map_err(|e| format!("Connection error: {}", e))?;
-    let authed = handle
-        .authenticate_password(user, password)
-        .await
-        .map_err(|e| format!("Auth error: {}", e))?;
+    let authed = tokio::time::timeout(
+        SFTP_AUTH_TIMEOUT,
+        handle.authenticate_password(user, password),
+    )
+    .await
+    .map_err(|_| format!("SFTP auth timed out after {}s", SFTP_AUTH_TIMEOUT.as_secs()))?
+    .map_err(|e| format!("Auth error: {}", e))?;
     if !authed.success() {
         return Err("Password authentication failed".to_string());
     }
     Ok(handle)
+}
+
+/// Best-effort recursive `mkdir -p` over the SFTP API (no shell exec, so no
+/// string-interpolated `mkdir -p '...'`). Walks each path component and
+/// creates it, tolerating "already exists" for intermediate dirs. The
+/// subsequent file put validates the final directory, so a genuine failure
+/// surfaces there instead of being masked here.
+async fn sftp_mkdir_p(sftp: &SftpSession, remote_dir: &str) {
+    let absolute = remote_dir.starts_with('/');
+    let mut acc = String::new();
+    for part in remote_dir.split('/') {
+        if part.is_empty() {
+            continue;
+        }
+        acc = if acc.is_empty() {
+            if absolute {
+                format!("/{}", part)
+            } else {
+                part.to_string()
+            }
+        } else {
+            format!("{}/{}", acc, part)
+        };
+        let _ = sftp.create_dir(acc.as_str()).await;
+    }
 }
 
 /// Async: SFTP-upload `local_path` to `remote_dir/<filename>`, creating the
@@ -213,17 +248,22 @@ pub async fn upload_via_sftp_async(
     let pool = ACTIVE_CONNECTION.get_or_init(|| TokioMutex::new(None));
     let mut lock = pool.lock().await;
 
-    // 1. Get or create warm connection inside the lock
+    // 1. Reuse a warm connection if it's still alive, else (re)connect. The
+    //    liveness probe is bounded so a half-open connection can't hang us.
     let mut is_healthy = false;
     if let Some(ref conn) = *lock {
         if conn.host == host && conn.port == port && conn.user == user {
-            if let Ok(ch) = conn.handle.channel_open_session().await {
+            let probe = tokio::time::timeout(
+                std::time::Duration::from_secs(3),
+                conn.handle.channel_open_session(),
+            )
+            .await;
+            if let Ok(Ok(ch)) = probe {
                 let _ = ch.close().await;
                 is_healthy = true;
             }
         }
     }
-
     if !is_healthy {
         let handle = connect_and_auth(&host, port, &user, &password).await?;
         *lock = Some(CachedConnection {
@@ -233,46 +273,44 @@ pub async fn upload_via_sftp_async(
             handle,
         });
     }
-
     let handle = &lock.as_ref().unwrap().handle;
 
-    // 2. mkdir -p the remote dir.
-    let mut ch = handle
-        .channel_open_session()
-        .await
-        .map_err(|e| format!("Open channel: {}", e))?;
-    ch.exec(true, format!("mkdir -p -- '{}'", remote_dir))
-        .await
-        .map_err(|e| format!("mkdir: {}", e))?;
-    while let Some(msg) = ch.wait().await {
-        if matches!(msg, ChannelMsg::ExitStatus { .. }) {
-            break;
-        }
-    }
+    // 2. SFTP session + mkdir -p (via the SFTP API, not shell exec) + put —
+    //    bounded by one transfer timeout. The captured refs are all Copy
+    //    shared refs, so `async move` borrows nothing mutably; the pool lock
+    //    (held here for the whole fn) outlives the block.
+    let remote_dir_ref = &remote_dir;
+    let local_ref = &local_path;
+    let filename_ref = &filename;
+    tokio::time::timeout(SFTP_TRANSFER_TIMEOUT, async move {
+        let sch = handle
+            .channel_open_session()
+            .await
+            .map_err(|e| format!("Open channel for SFTP: {}", e))?;
+        sch.request_subsystem(true, "sftp")
+            .await
+            .map_err(|e| format!("SFTP subsystem: {}", e))?;
+        let sftp = SftpSession::new(sch.into_stream())
+            .await
+            .map_err(|e| format!("SFTP init: {}", e))?;
 
-    // 3. SFTP put.
-    let sch = handle
-        .channel_open_session()
-        .await
-        .map_err(|e| format!("Open channel for SFTP: {}", e))?;
-    sch.request_subsystem(true, "sftp")
-        .await
-        .map_err(|e| format!("SFTP subsystem: {}", e))?;
-    let sftp = SftpSession::new(sch.into_stream())
-        .await
-        .map_err(|e| format!("SFTP init: {}", e))?;
+        sftp_mkdir_p(&sftp, remote_dir_ref).await;
 
-    let data = std::fs::read(&local_path).map_err(|e| format!("Read local file: {}", e))?;
-    let mut file = sftp
-        .create(format!("{}/{}", remote_dir, filename))
-        .await
-        .map_err(|e| format!("SFTP create: {}", e))?;
-    file.write_all(&data)
-        .await
-        .map_err(|e| format!("SFTP write: {}", e))?;
-    let _ = file.flush().await;
-    let _ = file.shutdown().await;
-    let _ = sftp.close().await;
+        let data = std::fs::read(local_ref).map_err(|e| format!("Read local file: {}", e))?;
+        let mut file = sftp
+            .create(format!("{}/{}", remote_dir_ref, filename_ref))
+            .await
+            .map_err(|e| format!("SFTP create: {}", e))?;
+        file.write_all(&data)
+            .await
+            .map_err(|e| format!("SFTP write: {}", e))?;
+        let _ = file.flush().await;
+        let _ = file.shutdown().await;
+        let _ = sftp.close().await;
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(|_| format!("SFTP transfer timed out after {}s", SFTP_TRANSFER_TIMEOUT.as_secs()))??;
 
     // NOTE: Connection is kept warm; do not disconnect handle.
     Ok(format!("{}/{}", remote_dir, filename))
