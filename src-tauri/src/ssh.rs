@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::sync::OnceLock;
 use tokio::sync::Mutex as TokioMutex;
 
+use russh::keys::PublicKeyBase64;
 use russh::{client, ChannelMsg, Disconnect};
 use russh_sftp::client::SftpSession;
 use tokio::io::AsyncWriteExt;
@@ -136,7 +137,10 @@ impl client::Handler for Handler {
         &mut self,
         server_public_key: &russh::keys::ssh_key::PublicKey,
     ) -> Result<bool, Self::Error> {
-        let fingerprint = format!("{}", server_public_key);
+        // Canonical base64 of the SSH public key via russh's PublicKeyBase64
+        // trait. Deterministic per key → valid TOFU fingerprint. (PublicKey
+        // itself doesn't impl Display in russh 0.51's forked ssh-key.)
+        let fingerprint = server_public_key.public_key_base64();
         match check_known_host(&self.host, self.port, &fingerprint) {
             HostKeyResult::New => {
                 let key_str = format!("{}:{}", self.host, self.port);
