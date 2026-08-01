@@ -39,7 +39,7 @@
           <img src="./assets/logo.png" class="w-8 h-8 rounded-lg shadow-lg shadow-[var(--color-accent)]/10 object-contain" alt="img2cli Logo" />
           <div>
             <h1 class="text-lg font-bold text-[var(--color-text-primary)] tracking-tight">img2cli</h1>
-            <p class="text-xs text-[var(--color-text-secondary)]">Settings v0.3.5</p>
+            <p class="text-xs text-[var(--color-text-secondary)]">Settings v0.3.6</p>
           </div>
         </div>
 
