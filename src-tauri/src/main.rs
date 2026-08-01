@@ -5,6 +5,7 @@ mod clipboard;
 mod capture;
 mod daemon;
 mod injector;
+mod job;
 mod ssh;
 mod ssh_config;
 

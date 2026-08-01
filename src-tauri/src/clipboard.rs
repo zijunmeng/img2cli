@@ -20,7 +20,7 @@ pub fn capture_and_save_image(config: &AppConfig, dest_path: &Path) -> Result<St
         }
     };
 
-    // 3. Convert image_data (RGBA) to DynamicImage
+    // 3. Convert image_data (RGBA) to RgbaImage
     let width = image_data.width as u32;
     let height = image_data.height as u32;
 
@@ -31,16 +31,29 @@ pub fn capture_and_save_image(config: &AppConfig, dest_path: &Path) -> Result<St
     let buffer = ImageBuffer::<Rgba<u8>, _>::from_raw(width, height, image_data.bytes.into_owned())
         .ok_or_else(|| "Failed to convert clipboard data to ImageBuffer".to_string())?;
 
-    let mut img = DynamicImage::ImageRgba8(buffer);
+    // 4. Process (resize, compress, save) — shared with region capture
+    process_and_save_image(&buffer, config, dest_path)
+}
 
-    // 4. Resize if max_dimension is set
+/// Process a raw RgbaImage: resize, compress (JPEG), and save or encode.
+/// Shared by clipboard capture and region screenshot (CapturedArtifact).
+pub fn process_and_save_image(
+    image: &image::RgbaImage,
+    config: &AppConfig,
+    dest_path: &Path,
+) -> Result<String, String> {
+    let mut img = DynamicImage::ImageRgba8(image.clone());
+
+    // Resize if max_dimension is set
     if let Some(max_dim) = config.max_dimension {
+        let width = img.width();
+        let height = img.height();
         if width > max_dim || height > max_dim {
             img = img.resize(max_dim, max_dim, image::imageops::FilterType::Lanczos3);
         }
     }
 
-    // 5. Output formats and saving
+    // Output formats and saving
     let output_format = config.output_format.to_lowercase();
 
     if output_format == "base64" {

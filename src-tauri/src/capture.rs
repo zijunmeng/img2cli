@@ -113,16 +113,19 @@ pub fn capture_region(
             
         let cropped = image::imageops::crop_imm(&full, cx, cy, cw, ch).to_image();
 
-        let mut cb = arboard::Clipboard::new().map_err(|e| format!("Open clipboard: {e}"))?;
-        cb.set_image(arboard::ImageData {
-            width: cropped.width() as usize,
-            height: cropped.height() as usize,
-            bytes: Cow::Owned(cropped.into_raw()),
-        })
-        .map_err(|e| format!("Set clipboard image error: {e}"))?;
+        // Write to clipboard so the user can still Ctrl+V the image to WeChat.
+        // Non-fatal — if it fails, the pipeline still processes the artifact.
+        if let Ok(mut cb) = arboard::Clipboard::new() {
+            let _ = cb.set_image(arboard::ImageData {
+                width: cropped.width() as usize,
+                height: cropped.height() as usize,
+                bytes: Cow::Owned(cropped.clone().into_raw()),
+            });
+        }
 
-        // Triggers upload and injection
-        daemon::trigger_capture_and_paste(&app_handle, state.inner());
+        // Pass artifact directly — no clipboard round-trip.
+        let artifact = daemon::CapturedArtifact::new(cropped, daemon::CaptureSource::Region);
+        daemon::trigger_with_artifact(&app_handle, state.inner(), Some(artifact));
         Ok(())
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]

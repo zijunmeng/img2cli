@@ -1,8 +1,42 @@
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use tauri::{AppHandle, Emitter};
 use crate::config::AppConfig;
+
+// ── CapturedArtifact: unified representation of a captured image ──────────
+
+pub type ArtifactId = u64;
+
+/// A captured image with metadata about its source. Replaces the old
+/// clipboard-round-trip pattern (region capture → write clipboard → read
+/// clipboard back). Now region capture creates a CapturedArtifact directly.
+#[derive(Debug, Clone)]
+pub struct CapturedArtifact {
+    pub id: ArtifactId,
+    pub image: Arc<image::RgbaImage>,
+    pub source: CaptureSource,
+    pub created_at: std::time::SystemTime,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum CaptureSource {
+    Clipboard,
+    Region,
+    Fullscreen,
+    File,
+}
+
+impl CapturedArtifact {
+    pub fn new(image: image::RgbaImage, source: CaptureSource) -> Self {
+        let created_at = std::time::SystemTime::now();
+        let id = created_at
+            .duration_since(std::time::SystemTime::UNIX_EPOCH)
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(0);
+        Self { id, image: Arc::new(image), source, created_at }
+    }
+}
 
 pub struct DaemonState {
     pub running: Arc<Mutex<bool>>,
@@ -14,14 +48,14 @@ pub struct DaemonState {
 pub fn log_message(app_handle: &AppHandle, log_history: &Arc<Mutex<Vec<String>>>, message: &str) {
     let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
     let formatted = format!("[{}] {}", timestamp, message);
-    
+
     if let Ok(mut history) = log_history.lock() {
         history.push(formatted.clone());
         if history.len() > 100 {
             history.remove(0); // Keep last 100 log lines
         }
     }
-    
+
     let _ = app_handle.emit("log_append", formatted);
 }
 
@@ -66,10 +100,10 @@ pub fn start_daemon(app_handle: AppHandle, config: AppConfig) -> DaemonState {
     let config_lock = Arc::new(RwLock::new(config));
     let config_lock_clone = config_lock.clone();
     let app_clone = app_handle.clone();
-    
+
     thread::spawn(move || {
         log_message(&app_clone, &log_history_clone, "Daemon background thread started.");
-        
+
         // Perform initial cleanup of expired temporary image files on startup
         let (save_dir, keep_days) = if let Ok(cfg) = config_lock_clone.read() {
             let dir = cfg.save_dir.clone().unwrap_or_else(|| std::env::temp_dir().join("img2cli"));
@@ -87,7 +121,7 @@ pub fn start_daemon(app_handle: AppHandle, config: AppConfig) -> DaemonState {
                 log_message(&app_clone, &log_history_clone, &format!("Warning: Failed to clean old temporary files: {}", e));
             }
         }
-        
+
         loop {
             if let Ok(running) = running_clone.lock() {
                 if !*running {
@@ -96,13 +130,13 @@ pub fn start_daemon(app_handle: AppHandle, config: AppConfig) -> DaemonState {
             } else {
                 break; // Exit if mutex is poisoned
             }
-            
+
             thread::sleep(std::time::Duration::from_millis(500));
         }
-        
+
         log_message(&app_clone, &log_history_clone, "Daemon background thread stopped.");
     });
-    
+
     DaemonState {
         running,
         log_history,
@@ -239,10 +273,10 @@ pub fn upload_via_scp(local_path: &Path, ssh: &crate::config::SshConfig) -> Resu
         args.push("-P".to_string());
         args.push(port.to_string());
     }
-    
+
     // Use -- to separate options from positional file arguments
     args.push("--".to_string());
-    
+
     args.push(local_path_str);
     args.push(dest_spec);
 
@@ -259,210 +293,58 @@ pub fn upload_via_scp(local_path: &Path, ssh: &crate::config::SshConfig) -> Resu
     Ok(remote_dest)
 }
 
+/// Hotkey entry point (Alt+V): read the clipboard. Thin wrapper around
+/// `trigger_with_artifact`.
 pub fn trigger_capture_and_paste(app_handle: &AppHandle, state: &DaemonState) {
-    let app_handle_clone = app_handle.clone();
-    let log_history_clone = state.log_history.clone();
-    let config_clone = if let Ok(config) = state.config.read() {
+    trigger_with_artifact(app_handle, state, None);
+}
+
+/// Snapshot the config, wrap it (and an optional pre-captured artifact) in a
+/// `TransferJob`, and hand it to the single job worker. Returns immediately so
+/// the global-shortcut handler never blocks.
+///
+/// * `artifact = None` → Alt+V clipboard path (worker reads the clipboard).
+/// * `artifact = Some` → region/fullscreen capture, flows straight through
+///   with no clipboard round-trip.
+///
+/// See `job::JobManager` for execution and ordering guarantees.
+pub fn trigger_with_artifact(
+    app_handle: &AppHandle,
+    state: &DaemonState,
+    artifact: Option<CapturedArtifact>,
+) {
+    let config = if let Ok(config) = state.config.read() {
         config.clone()
     } else {
         log_message(app_handle, &state.log_history, "Error: Failed to read configuration lock.");
         return;
     };
-    
-    // Spawn asynchronously to prevent locking the global shortcut handler
-    thread::spawn(move || {
-        log_message(&app_handle_clone, &log_history_clone, "Hotkey triggered. Capturing clipboard...");
-        
-        // 1. Generate temp filename
-        let filename = format!("img_{}.jpg", chrono::Local::now().format("%Y%m%d_%H%M%S_%f"));
-        
-        // 2. Get local temporary directory
-        let local_dir = if let Some(ref dir) = config_clone.save_dir {
-            dir.clone()
-        } else {
-            std::env::temp_dir().join("img2cli")
-        };
-        let local_dest = local_dir.join(&filename);
-        
-        // 3. Capture & compress clipboard image
-        match crate::clipboard::capture_and_save_image(&config_clone, &local_dest) {
-            Ok(capture_result) => {
-                // If Base64 format is selected, the result contains the complete data URI string!
-                if config_clone.output_format.to_lowercase() == "base64" {
-                    let paste_text = if config_clone.wrap_single_quotes {
-                        format!("'{}'", capture_result)
-                    } else {
-                        capture_result
-                    };
-                    
-                    log_message(&app_handle_clone, &log_history_clone, "Base64 image generated. Injecting data URI...");
-                    match crate::injector::inject_text(&paste_text, &config_clone.injection_mode) {
-                        Ok(_) => log_message(&app_handle_clone, &log_history_clone, "Injection completed successfully."),
-                        Err(e) => log_message(&app_handle_clone, &log_history_clone, &format!("Injection failed: {}", e)),
-                    }
-                    return;
-                }
-                
-                log_message(&app_handle_clone, &log_history_clone, &format!("Image saved locally to {:?}", local_dest));
-                
-                // 4. Route, in priority order:
-                //    (a) manual Dynamic Router Targets (by match_pattern)
-                //    (b) ssh-config auto-detect (title vs ~/.ssh/config hosts)
-                //    (c) default SSH host, then (d) local path (resolved in step 5)
-                let mut active_target = None;
-                let mut auto_detected_ssh: Option<crate::config::SshConfig> = None;
 
-                if let Some(title) = get_active_window_title() {
-                    let title_lower = title.to_lowercase();
-                    log_message(&app_handle_clone, &log_history_clone, &format!("Active window title: {:?}", title));
+    let job = crate::job::TransferJob::new(
+        artifact,
+        config,
+        app_handle.clone(),
+        state.log_history.clone(),
+    );
+    let id = job.id;
 
-                    // (a) manual targets — explicit user intent, highest priority
-                    if let Some(ref targets) = config_clone.targets {
-                        for target in targets {
-                            if target.enabled
-                                && !target.match_pattern.is_empty()
-                                && title_lower.contains(&target.match_pattern.to_lowercase())
-                            {
-                                log_message(&app_handle_clone, &log_history_clone, &format!("Matched target pattern {:?}", target.match_pattern));
-                                active_target = Some(target.clone());
-                                break;
-                            }
-                        }
-                    }
+    let _ = app_handle.emit("job_event", crate::job::JobEvent::Created { id });
 
-                    // (b) ssh-config auto-detect: works for any terminal whose
-                    //     title contains the host's alias or hostname (most do).
-                    if active_target.is_none() {
-                        let default_remote = config_clone
-                            .ssh
-                            .as_ref()
-                            .map(|s| s.remote_dir.clone())
-                            .filter(|d| !d.is_empty())
-                            .unwrap_or_else(|| "/tmp/img2cli".to_string());
-                        if let Some(cfg_path) = crate::ssh_config::ssh_config_path() {
-                            if let Ok(content) = std::fs::read_to_string(&cfg_path) {
-                                let hosts = crate::ssh_config::parse_ssh_config(&content);
-                                // pick the most specific match (longest alias/host in title)
-                                let best = hosts.into_iter().filter(|h| {
-                                    (!h.alias.is_empty() && title_lower.contains(&h.alias.to_lowercase()))
-                                        || (!h.host.is_empty() && title_lower.contains(&h.host.to_lowercase()))
-                                }).max_by_key(|h| h.alias.len().max(h.host.len()));
-                                if let Some(h) = best {
-                                    log_message(&app_handle_clone, &log_history_clone, &format!("Auto-detected SSH host from title: {:?}", h.alias));
-                                    auto_detected_ssh = Some(crate::config::SshConfig {
-                                        enabled: true,
-                                        host: h.host,
-                                        port: Some(h.port),
-                                        username: Some(h.username),
-                                        remote_dir: default_remote,
-                                        match_pattern: Some(h.alias),
-                                        remember_password: true,
-                                    });
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                // 5. Build scp upload configuration or local copy path
-                let mut scp_upload_ssh = None;
-                let mut local_dest_dir = None;
-                
-                if let Some(target) = active_target {
-                    match target.r#type.as_str() {
-                        "ssh" => {
-                            scp_upload_ssh = Some(crate::config::SshConfig {
-                                enabled: true,
-                                host: target.host.unwrap_or_default(),
-                                port: target.port,
-                                username: target.username,
-                                remote_dir: target.remote_dir.unwrap_or_else(|| "/tmp/img2cli".to_string()),
-                                match_pattern: Some(target.match_pattern),
-                                remember_password: target.remember_password.unwrap_or(true),
-                            });
-                        }
-                        "local" => {
-                            local_dest_dir = target.local_dir.map(PathBuf::from);
-                        }
-                        _ => {}
-                    }
-                } else if let Some(ssh) = auto_detected_ssh {
-                    log_message(&app_handle_clone, &log_history_clone, &format!("Auto-routing via ssh-config to {}", ssh.host));
-                    scp_upload_ssh = Some(ssh);
-                } else if let Some(ref default_ssh) = config_clone.ssh {
-                    if default_ssh.enabled {
-                        log_message(&app_handle_clone, &log_history_clone, "No match found. Falling back to default SSH.");
-                        scp_upload_ssh = Some(default_ssh.clone());
-                    }
-                }
-                
-                // 6. Perform copy/upload operations
-                let paste_text = if let Some(ssh) = scp_upload_ssh {
-                    let user = ssh.username.clone().unwrap_or_default();
-                    let identity = crate::ssh::identity_key(&user, &ssh.host, ssh.port);
-                    let port = ssh.port.unwrap_or(22);
-                    let remote_result = if let Some(pw) = crate::ssh::get_stored_password(&identity) {
-                        log_message(&app_handle_clone, &log_history_clone, &format!("Uploading via SFTP (password) to {}...", ssh.host));
-                        crate::ssh::upload_via_sftp(&ssh.host, port, &user, &pw, &ssh.remote_dir, &local_dest)
-                    } else {
-                        log_message(&app_handle_clone, &log_history_clone, &format!("Uploading via SCP (key) to {}...", ssh.host));
-                        upload_via_scp(&local_dest, &ssh)
-                    };
-                    match remote_result {
-                        Ok(remote_path) => {
-                            let base_format = match config_clone.output_format.to_lowercase().as_str() {
-                                "markdown" => format!("![image]({})", remote_path),
-                                "html" => format!("<img src=\"{}\" />", remote_path),
-                                _ => remote_path,
-                            };
-                            if config_clone.wrap_single_quotes {
-                                format!("'{}'", base_format)
-                            } else {
-                                base_format
-                            }
-                        }
-                        Err(e) => {
-                            let err_msg = format!("Upload failed: {}", e);
-                            log_message(&app_handle_clone, &log_history_clone, &err_msg);
-                            return;
-                        }
-                    }
-                } else {
-                    let local_path = if let Some(dest_dir) = local_dest_dir {
-                        let _ = std::fs::create_dir_all(&dest_dir);
-                        let final_local_path = dest_dir.join(&filename);
-                        if std::fs::copy(&local_dest, &final_local_path).is_ok() {
-                            final_local_path
-                        } else {
-                            local_dest
-                        }
-                    } else {
-                        local_dest
-                    };
-                    
-                    let path_str = local_path.to_string_lossy().to_string();
-                    let base_format = match config_clone.output_format.to_lowercase().as_str() {
-                        "markdown" => format!("![image]({})", path_str),
-                        "html" => format!("<img src=\"{}\" />", path_str),
-                        _ => path_str,
-                    };
-                    if config_clone.wrap_single_quotes {
-                        format!("'{}'", base_format)
-                    } else {
-                        base_format
-                    }
-                };
-                
-                // 7. Inject paste link into focused terminal CWD
-                log_message(&app_handle_clone, &log_history_clone, &format!("Injecting paste link: {}", paste_text));
-                match crate::injector::inject_text(&paste_text, &config_clone.injection_mode) {
-                    Ok(_) => log_message(&app_handle_clone, &log_history_clone, "Injection completed successfully."),
-                    Err(e) => log_message(&app_handle_clone, &log_history_clone, &format!("Injection failed: {}", e)),
-                }
-            }
-            Err(e) => {
-                log_message(&app_handle_clone, &log_history_clone, &format!("Clipboard image capture failed: {}", e));
-            }
-        }
-    });
+    match crate::job::job_manager().submit(job) {
+        Ok(()) => log_message(
+            app_handle,
+            &state.log_history,
+            &format!("Job #{} queued.", id),
+        ),
+        Err(crate::job::AppError::QueueFull) => log_message(
+            app_handle,
+            &state.log_history,
+            "Job queue full — capture dropped. Wait for the current upload to finish.",
+        ),
+        Err(e) => log_message(
+            app_handle,
+            &state.log_history,
+            &format!("Failed to enqueue job #{}: {}", id, e),
+        ),
+    }
 }

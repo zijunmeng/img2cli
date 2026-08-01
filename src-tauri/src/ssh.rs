@@ -2,7 +2,9 @@
 //! stored in the OS keyring (Xshell-style). Key-based servers keep using the
 //! system `ssh`/`scp` binaries (see `daemon::upload_via_scp`).
 
-use std::path::Path;
+use std::collections::HashMap;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::OnceLock;
 use tokio::sync::Mutex as TokioMutex;
@@ -73,17 +75,77 @@ pub fn clear_password(identity: &str) -> Result<(), String> {
     }
 }
 
-/// Accept any host key (equivalent to `StrictHostKeyChecking=no`).
-struct Handler;
+// ── Known hosts (TOFU: Trust On First Use) ──────────────────────────────
+
+fn known_hosts_path() -> PathBuf {
+    crate::config::AppConfig::config_file_path()
+        .parent()
+        .map(|d| d.join("known_hosts"))
+        .unwrap_or_else(|| PathBuf::from("known_hosts"))
+}
+
+fn load_known_hosts() -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    if let Ok(content) = std::fs::read_to_string(known_hosts_path()) {
+        for line in content.lines() {
+            if let Some((host, fp)) = line.split_once(' ') {
+                map.insert(host.trim().to_string(), fp.trim().to_string());
+            }
+        }
+    }
+    map
+}
+
+fn save_known_host(host_key: &str, fingerprint: &str) {
+    let path = known_hosts_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+        let _ = writeln!(f, "{} {}", host_key, fingerprint);
+    }
+}
+
+enum HostKeyResult {
+    New,
+    Match,
+    Mismatch,
+}
+
+fn check_known_host(host: &str, port: u16, fingerprint: &str) -> HostKeyResult {
+    let key = format!("{}:{}", host, port);
+    let known = load_known_hosts();
+    match known.get(&key) {
+        None => HostKeyResult::New,
+        Some(stored) if stored == fingerprint => HostKeyResult::Match,
+        Some(_) => HostKeyResult::Mismatch,
+    }
+}
+
+// ── SSH client handler with TOFU host-key verification ────────────────────
+
+struct Handler {
+    host: String,
+    port: u16,
+}
 
 impl client::Handler for Handler {
     type Error = russh::Error;
 
     async fn check_server_key(
         &mut self,
-        _server_public_key: &russh::keys::ssh_key::PublicKey,
+        server_public_key: &russh::keys::ssh_key::PublicKey,
     ) -> Result<bool, Self::Error> {
-        Ok(true)
+        let fingerprint = format!("{}", server_public_key);
+        match check_known_host(&self.host, self.port, &fingerprint) {
+            HostKeyResult::New => {
+                let key_str = format!("{}:{}", self.host, self.port);
+                save_known_host(&key_str, &fingerprint);
+                Ok(true) // TOFU: accept on first use
+            }
+            HostKeyResult::Match => Ok(true),
+            HostKeyResult::Mismatch => Ok(false), // possible MITM — reject
+        }
     }
 }
 
@@ -94,9 +156,13 @@ async fn connect_and_auth(
     password: &str,
 ) -> Result<client::Handle<Handler>, String> {
     let config = Arc::new(client::Config::default());
-    let mut handle = client::connect(config, (host, port), Handler)
-        .await
-        .map_err(|e| format!("Connection error: {}", e))?;
+    let mut handle = client::connect(
+        config,
+        (host, port),
+        Handler { host: host.to_string(), port },
+    )
+    .await
+    .map_err(|e| format!("Connection error: {}", e))?;
     let authed = handle
         .authenticate_password(user, password)
         .await
