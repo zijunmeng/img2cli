@@ -25,6 +25,7 @@ use tauri::{AppHandle, Emitter};
 
 use crate::config::AppConfig;
 use crate::daemon::{log_message, CapturedArtifact};
+use crate::transport::ArtifactTransport;
 
 pub type JobId = u64;
 
