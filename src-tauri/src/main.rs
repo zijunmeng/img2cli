@@ -6,6 +6,7 @@ mod capture;
 mod daemon;
 mod injector;
 mod job;
+mod resolver;
 mod ssh;
 mod ssh_config;
 

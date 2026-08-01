@@ -16,7 +16,6 @@
 //! `ssh::get_runtime().block_on(..)`. Processing is panic-guarded so one bad
 //! job can't permanently stall the worker.
 
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -237,6 +236,9 @@ fn worker_loop(rx: Receiver<TransferJob>) {
 /// The capture→compress→route→upload→inject pipeline. Runs on the single job
 /// worker, so every step (including injection) is strictly serialized —
 /// Step 6 falls out of the single-worker design for free.
+///
+/// Routing itself lives in `resolver::resolve_target` (Step 8); this function
+/// is now just orchestration: capture → resolve → deliver → inject.
 fn process_job(job: &mut TransferJob) -> Result<String, AppError> {
     job.set_state(JobState::Processing);
 
@@ -270,156 +272,75 @@ fn process_job(job: &mut TransferJob) -> Result<String, AppError> {
 
     job.log(&format!("Image saved locally to {:?}", local_dest));
 
-    // 4. Route, in priority order:
-    //    (a) manual Dynamic Router Targets (by match_pattern)
-    //    (b) ssh-config auto-detect (active window title vs ~/.ssh/config hosts)
-    //    (c) default SSH host, then (d) local path (resolved in step 5)
+    // 4. Resolve destination via the routing chain
+    //    (manual rules → ssh-config auto-detect → default SSH; else local temp).
     job.set_state(JobState::Resolving);
-    let mut active_target = None;
-    let mut auto_detected_ssh: Option<crate::config::SshConfig> = None;
-
-    if let Some(title) = crate::daemon::get_active_window_title() {
-        let title_lower = title.to_lowercase();
+    let window_title = crate::daemon::get_active_window_title();
+    if let Some(ref title) = window_title {
         job.log(&format!("Active window title: {:?}", title));
-
-        // (a) manual targets — explicit user intent, highest priority
-        if let Some(ref targets) = job.config.targets {
-            for target in targets {
-                if target.enabled
-                    && !target.match_pattern.is_empty()
-                    && title_lower.contains(&target.match_pattern.to_lowercase())
-                {
-                    job.log(&format!("Matched target pattern {:?}", target.match_pattern));
-                    active_target = Some(target.clone());
-                    break;
-                }
-            }
-        }
-
-        // (b) ssh-config auto-detect: works for any terminal whose title
-        //     contains the host's alias or hostname (most do).
-        if active_target.is_none() {
-            let default_remote = job
-                .config
-                .ssh
-                .as_ref()
-                .map(|s| s.remote_dir.clone())
-                .filter(|d| !d.is_empty())
-                .unwrap_or_else(|| "/tmp/img2cli".to_string());
-            if let Some(cfg_path) = crate::ssh_config::ssh_config_path() {
-                if let Ok(content) = std::fs::read_to_string(&cfg_path) {
-                    let hosts = crate::ssh_config::parse_ssh_config(&content);
-                    // pick the most specific match (longest alias/host in title)
-                    let best = hosts
-                        .into_iter()
-                        .filter(|h| {
-                            (!h.alias.is_empty() && title_lower.contains(&h.alias.to_lowercase()))
-                                || (!h.host.is_empty()
-                                    && title_lower.contains(&h.host.to_lowercase()))
-                        })
-                        .max_by_key(|h| h.alias.len().max(h.host.len()));
-                    if let Some(h) = best {
-                        job.log(&format!("Auto-detected SSH host from title: {:?}", h.alias));
-                        auto_detected_ssh = Some(crate::config::SshConfig {
-                            enabled: true,
-                            host: h.host,
-                            port: Some(h.port),
-                            username: Some(h.username),
-                            remote_dir: default_remote,
-                            match_pattern: Some(h.alias),
-                            remember_password: true,
-                        });
-                    }
-                }
-            }
-        }
     }
+    let resolved = crate::resolver::resolve_target(&crate::resolver::ResolutionInput {
+        window_title: window_title.as_deref(),
+        config: &job.config,
+    });
 
-    // 5. Resolve to an upload target or a local copy path
-    let mut scp_upload_ssh = None;
-    let mut local_dest_dir: Option<PathBuf> = None;
-
-    if let Some(target) = active_target {
-        match target.r#type.as_str() {
-            "ssh" => {
-                scp_upload_ssh = Some(crate::config::SshConfig {
-                    enabled: true,
-                    host: target.host.unwrap_or_default(),
-                    port: target.port,
-                    username: target.username,
-                    remote_dir: target
-                        .remote_dir
-                        .unwrap_or_else(|| "/tmp/img2cli".to_string()),
-                    match_pattern: Some(target.match_pattern),
-                    remember_password: target.remember_password.unwrap_or(true),
-                });
-            }
-            "local" => {
-                local_dest_dir = target.local_dir.map(PathBuf::from);
-            }
-            _ => {}
-        }
-    } else if let Some(ssh) = auto_detected_ssh {
-        job.log(&format!("Auto-routing via ssh-config to {}", ssh.host));
-        scp_upload_ssh = Some(ssh);
-    } else if let Some(ref default_ssh) = job.config.ssh {
-        if default_ssh.enabled {
-            job.log("No match found. Falling back to default SSH.");
-            scp_upload_ssh = Some(default_ssh.clone());
-        }
-    }
-
-    // 6. Upload (or local copy) → build the paste text
+    // 5. Deliver (upload / local copy / temp) and build the paste text
     job.set_state(JobState::Uploading);
-    let paste_text = if let Some(ssh) = scp_upload_ssh {
-        let user = ssh.username.clone().unwrap_or_default();
-        let identity = crate::ssh::identity_key(&user, &ssh.host, ssh.port);
-        let port = ssh.port.unwrap_or(22);
-        let remote_result = if let Some(pw) = crate::ssh::get_stored_password(&identity) {
-            job.log(&format!("Uploading via SFTP (password) to {}...", ssh.host));
-            crate::ssh::upload_via_sftp(&ssh.host, port, &user, &pw, &ssh.remote_dir, &local_dest)
-        } else {
-            job.log(&format!("Uploading via SCP (key) to {}...", ssh.host));
-            crate::daemon::upload_via_scp(&local_dest, &ssh)
-        };
-        match remote_result {
-            Ok(remote_path) => {
-                let base_format = match job.config.output_format.to_lowercase().as_str() {
-                    "markdown" => format!("![image]({})", remote_path),
-                    "html" => format!("<img src=\"{}\" />", remote_path),
-                    _ => remote_path,
-                };
-                wrap_quotes(base_format, job.config.wrap_single_quotes)
-            }
-            Err(e) => {
-                let err_msg = format!("Upload failed: {}", e);
-                job.log(&err_msg);
-                return Err(AppError::Upload(err_msg));
+    let paste_text = match resolved {
+        Some((crate::resolver::ResolutionCandidate::Ssh(ssh), src)) => {
+            let user = ssh.username.clone().unwrap_or_default();
+            let identity = crate::ssh::identity_key(&user, &ssh.host, ssh.port);
+            let port = ssh.port.unwrap_or(22);
+            job.log(&format!(
+                "Routed via {:?} (pattern: {:?}) — uploading to {}...",
+                src, ssh.match_pattern, ssh.host
+            ));
+            let remote_result = if let Some(pw) = crate::ssh::get_stored_password(&identity) {
+                crate::ssh::upload_via_sftp(
+                    &ssh.host, port, &user, &pw, &ssh.remote_dir, &local_dest,
+                )
+            } else {
+                crate::daemon::upload_via_scp(&local_dest, &ssh)
+            };
+            match remote_result {
+                Ok(remote_path) => wrap_quotes(
+                    format_path(&job.config.output_format, &remote_path),
+                    job.config.wrap_single_quotes,
+                ),
+                Err(e) => {
+                    let err_msg = format!("Upload failed: {}", e);
+                    job.log(&err_msg);
+                    return Err(AppError::Upload(err_msg));
+                }
             }
         }
-    } else {
-        let local_path = if let Some(dest_dir) = local_dest_dir {
-            let _ = std::fs::create_dir_all(&dest_dir);
-            let final_local_path = dest_dir.join(&filename);
-            if std::fs::copy(&local_dest, &final_local_path).is_ok() {
+        Some((crate::resolver::ResolutionCandidate::Local(dir), src)) => {
+            job.log(&format!("Routed via {:?} — copying to local {:?}", src, dir));
+            let _ = std::fs::create_dir_all(&dir);
+            let final_local_path = dir.join(&filename);
+            let local_path = if std::fs::copy(&local_dest, &final_local_path).is_ok() {
                 final_local_path
             } else {
                 local_dest
-            }
-        } else {
-            local_dest
-        };
-
-        let path_str = local_path.to_string_lossy().to_string();
-        let base_format = match job.config.output_format.to_lowercase().as_str() {
-            "markdown" => format!("![image]({})", path_str),
-            "html" => format!("<img src=\"{}\" />", path_str),
-            _ => path_str,
-        };
-        wrap_quotes(base_format, job.config.wrap_single_quotes)
+            };
+            let path_str = local_path.to_string_lossy().to_string();
+            wrap_quotes(
+                format_path(&job.config.output_format, &path_str),
+                job.config.wrap_single_quotes,
+            )
+        }
+        None => {
+            // No remote target matched — use the local temp file path as-is.
+            job.log("No remote target matched — using local temp file.");
+            let path_str = local_dest.to_string_lossy().to_string();
+            wrap_quotes(
+                format_path(&job.config.output_format, &path_str),
+                job.config.wrap_single_quotes,
+            )
+        }
     };
 
-    // 7. Inject paste link into focused terminal (serialized by the worker)
+    // 6. Inject paste link into focused terminal (serialized by the worker)
     job.set_state(JobState::Injecting);
     job.log(&format!("Injecting paste link: {}", paste_text));
     crate::injector::inject_text(&paste_text, &job.config.injection_mode)
@@ -433,5 +354,14 @@ fn wrap_quotes(s: String, wrap: bool) -> String {
         format!("'{}'", s)
     } else {
         s
+    }
+}
+
+/// Wrap a delivered path (remote or local) in the configured output format.
+fn format_path(output_format: &str, path: &str) -> String {
+    match output_format.to_lowercase().as_str() {
+        "markdown" => format!("![image]({})", path),
+        "html" => format!("<img src=\"{}\" />", path),
+        _ => path.to_string(),
     }
 }
