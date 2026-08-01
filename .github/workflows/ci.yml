@@ -1,0 +1,62 @@
+name: CI
+
+# Lightweight per-push / per-PR compile validation. Does NOT package or
+# publish — that stays in release.yml (tag-triggered). Reuses the same
+# 3-platform matrix and Ubuntu system-dep list as release.yml so the
+# validation environment matches the release environment.
+on:
+  push:
+    branches:
+      - '**'
+    tags-ignore:
+      - 'v*' # release.yml owns tag builds
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check (${{ matrix.platform }})
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos-latest, ubuntu-22.04, windows-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # Targets for macOS cross-compilation (Intel + Apple Silicon)
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install system dependencies (Ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libdbus-1-dev libxcb1-dev libxext-dev libxfixes-dev libxrandr-dev libegl-dev libgl1-mesa-dev libpipewire-0.3-dev
+
+      - name: Install npm dependencies
+        run: npm install
+
+      - name: Build frontend (also produces dist/ for tauri-build)
+        run: npm run build
+
+      - name: Cargo check (Rust type-check)
+        working-directory: src-tauri
+        run: cargo check
