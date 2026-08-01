@@ -159,7 +159,9 @@ pub enum JobEvent {
 // ── JobManager (Step 5) ───────────────────────────────────────────────────
 
 pub struct JobManager {
-    sender: SyncSender<TransferJob>,
+    // `SyncSender` is `Send` but `!Sync`, so wrapping it in a Mutex is what
+    // makes `JobManager` (and thus the `static OnceLock` below) `Sync`.
+    sender: Mutex<SyncSender<TransferJob>>,
 }
 
 static JOB_MANAGER: OnceLock<JobManager> = OnceLock::new();
@@ -173,7 +175,7 @@ pub fn job_manager() -> &'static JobManager {
             .name("img2cli-job-worker".into())
             .spawn(move || worker_loop(rx))
             .expect("Failed to spawn job worker thread");
-        JobManager { sender: tx }
+        JobManager { sender: Mutex::new(tx) }
     })
 }
 
@@ -181,7 +183,7 @@ impl JobManager {
     /// Enqueue a job without blocking the caller. Returns `QueueFull` when the
     /// backlog is full (the worker is behind) — the caller logs and drops it.
     pub fn submit(&self, job: TransferJob) -> Result<(), AppError> {
-        match self.sender.try_send(job) {
+        match self.sender.lock().unwrap().try_send(job) {
             Ok(()) => Ok(()),
             Err(TrySendError::Full(_)) => Err(AppError::QueueFull),
             Err(TrySendError::Disconnected(_)) => Err(AppError::WorkerGone),
