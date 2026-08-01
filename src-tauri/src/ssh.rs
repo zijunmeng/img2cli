@@ -48,6 +48,23 @@ pub fn get_stored_password(identity: &str) -> Option<String> {
         .and_then(|e| e.get_password().ok())
 }
 
+/// Look up a stored password, DISTINGUISHING "no entry" from a real backend
+/// failure.
+///   Ok(None)  = no password stored for this identity
+///   Ok(Some)  = the password
+///   Err(_)    = the keyring backend could not be queried
+/// Callers MUST NOT treat Err as "no password" — that would mask a broken
+/// keyring and silently fall back to key-based auth. Used by the SSH
+/// transport dispatcher (Step 9) to pick SFTP vs SCP correctly.
+pub fn lookup_password(identity: &str) -> Result<Option<String>, keyring::Error> {
+    let entry = keyring::Entry::new(SERVICE, identity)?;
+    match entry.get_password() {
+        Ok(pw) => Ok(Some(pw)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
 /// Whether a password is stored for an identity (for UI status display).
 pub fn has_stored_password(identity: &str) -> bool {
     keyring::Entry::new(SERVICE, identity)

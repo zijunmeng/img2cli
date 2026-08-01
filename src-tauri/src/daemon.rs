@@ -223,62 +223,51 @@ pub fn get_active_window_title() -> Option<String> {
     None
 }
 
-pub fn upload_via_scp(local_path: &Path, ssh: &crate::config::SshConfig) -> Result<String, String> {
+/// SCP upload via the system `ssh`/`scp` binaries (key-based auth).
+/// Takes resolved connection params (mirroring `routing::SshTarget`) so the
+/// transport layer doesn't have to reconstruct an `SshConfig`. Returns the
+/// remote path on success.
+pub fn upload_via_scp(
+    local_path: &Path,
+    host: &str,
+    port: u16,
+    username: &str,
+    remote_dir: &str,
+) -> Result<String, String> {
     let filename = local_path.file_name()
         .and_then(|f| f.to_str())
         .ok_or_else(|| "Invalid local file name".to_string())?;
 
-    let remote_dest = format!("{}/{}", ssh.remote_dir, filename);
+    let remote_dest = format!("{}/{}", remote_dir, filename);
 
-    let dest_spec = if let Some(ref username) = ssh.username {
-        if username.is_empty() {
-            format!("{}:{}", ssh.host, remote_dest)
-        } else {
-            format!("{}@{}:{}", username, ssh.host, remote_dest)
-        }
+    let dest_spec = if username.is_empty() {
+        format!("{}:{}", host, remote_dest)
     } else {
-        format!("{}:{}", ssh.host, remote_dest)
+        format!("{}@{}:{}", username, host, remote_dest)
+    };
+    let ssh_target = if username.is_empty() {
+        host.to_string()
+    } else {
+        format!("{}@{}", username, host)
     };
 
-    // Ensure the remote directory exists so scp doesn't fail on a missing
+    // Best-effort mkdir -p on the remote so scp doesn't fail on a missing
     // folder (first run, or a user-supplied path that doesn't exist yet).
-    // Best-effort: ignore errors here and let scp surface any real failure.
-    let ssh_target = if let Some(ref username) = ssh.username {
-        if username.is_empty() {
-            ssh.host.clone()
-        } else {
-            format!("{}@{}", username, ssh.host)
-        }
-    } else {
-        ssh.host.clone()
-    };
-    let mut mkdir_args = Vec::new();
-    if let Some(port) = ssh.port {
-        mkdir_args.push("-p".to_string());
-        mkdir_args.push(port.to_string());
-    }
-    mkdir_args.push("-o".to_string());
-    mkdir_args.push("ConnectTimeout=5".to_string());
-    mkdir_args.push("-o".to_string());
-    mkdir_args.push("BatchMode=yes".to_string());
-    mkdir_args.push("--".to_string());
-    mkdir_args.push(ssh_target);
-    mkdir_args.push(format!("mkdir -p '{}'", ssh.remote_dir));
+    let mkdir_args = vec![
+        "-p".to_string(), port.to_string(),
+        "-o".to_string(), "ConnectTimeout=5".to_string(),
+        "-o".to_string(), "BatchMode=yes".to_string(),
+        "--".to_string(), ssh_target,
+        format!("mkdir -p '{}'", remote_dir),
+    ];
     let _ = std::process::Command::new("ssh").args(&mkdir_args).output();
 
-    let local_path_str = local_path.to_string_lossy().to_string();
-
-    let mut args = Vec::new();
-    if let Some(port) = ssh.port {
-        args.push("-P".to_string());
-        args.push(port.to_string());
-    }
-
-    // Use -- to separate options from positional file arguments
-    args.push("--".to_string());
-
-    args.push(local_path_str);
-    args.push(dest_spec);
+    let args = vec![
+        "-P".to_string(), port.to_string(),
+        "--".to_string(),
+        local_path.to_string_lossy().to_string(),
+        dest_spec,
+    ];
 
     let output = std::process::Command::new("scp")
         .args(&args)

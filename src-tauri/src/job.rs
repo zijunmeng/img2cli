@@ -297,7 +297,9 @@ fn process_job(job: &mut TransferJob) -> Result<String, AppError> {
             // LocalFallback always matches in the standard chain, so this is
             // unreachable — handled defensively by reusing the temp file.
             Err(crate::routing::RouteError::NoRoute) => crate::routing::RouteCandidate {
-                target: crate::routing::DeliveryTarget::Local(local_dest.clone()),
+                target: crate::routing::DeliveryTarget::Local(crate::routing::LocalTarget {
+                    dir: local_dest.clone(),
+                }),
                 source: crate::routing::RouteSource::LocalFallback,
                 reason: "no route (defensive fallback)".to_string(),
                 confidence: 0,
@@ -309,52 +311,25 @@ fn process_job(job: &mut TransferJob) -> Result<String, AppError> {
         route.source, route.confidence, route.reason
     ));
 
-    // 5. Deliver (upload / local copy) and build the paste text
+    // 5. Deliver via transport (upload / local copy), then format the link
     job.set_state(JobState::Uploading);
-    let paste_text = match route.target {
-        crate::routing::DeliveryTarget::Ssh(ssh) => {
-            let user = ssh.username.clone().unwrap_or_default();
-            let identity = crate::ssh::identity_key(&user, &ssh.host, ssh.port);
-            let port = ssh.port.unwrap_or(22);
-            let remote_result = if let Some(pw) = crate::ssh::get_stored_password(&identity) {
-                job.log(&format!("Uploading via SFTP (password) to {}...", ssh.host));
-                crate::ssh::upload_via_sftp(&ssh.host, port, &user, &pw, &ssh.remote_dir, &local_dest)
-            } else {
-                job.log(&format!("Uploading via SCP (key) to {}...", ssh.host));
-                crate::daemon::upload_via_scp(&local_dest, &ssh)
-            };
-            match remote_result {
-                Ok(remote_path) => wrap_quotes(
-                    format_path(&job.config.output_format, &remote_path),
-                    job.config.wrap_single_quotes,
-                ),
-                Err(e) => {
-                    let err_msg = format!("Upload failed: {}", e);
-                    job.log(&err_msg);
-                    return Err(AppError::Upload(err_msg));
-                }
-            }
-        }
-        crate::routing::DeliveryTarget::Local(dir) => {
-            let _ = std::fs::create_dir_all(&dir);
-            let final_local_path = dir.join(&filename);
-            // Guard the self-copy: when the target dir is where the temp file
-            // already lives (the LocalFallback case), reuse it instead of
-            // copying a file onto itself (which would truncate it).
-            let local_path = if final_local_path == local_dest {
-                local_dest
-            } else if std::fs::copy(&local_dest, &final_local_path).is_ok() {
-                final_local_path
-            } else {
-                local_dest
-            };
-            let path_str = local_path.to_string_lossy().to_string();
-            wrap_quotes(
-                format_path(&job.config.output_format, &path_str),
-                job.config.wrap_single_quotes,
-            )
+    let processed = crate::transport::ProcessedArtifact {
+        local_path: local_dest.clone(),
+        filename: filename.clone(),
+    };
+    let delivered = match crate::transport::default_transport().deliver(&processed, &route.target) {
+        Ok(d) => d,
+        Err(e) => {
+            let msg = format!("Delivery failed: {}", e);
+            job.log(&msg);
+            return Err(AppError::Upload(msg));
         }
     };
+    job.log(&format!("Delivered: {}", delivered.delivered_path));
+    let paste_text = wrap_quotes(
+        format_path(&job.config.output_format, &delivered.delivered_path),
+        job.config.wrap_single_quotes,
+    );
 
     // 6. Inject paste link into focused terminal (serialized by the worker)
     job.set_state(JobState::Injecting);

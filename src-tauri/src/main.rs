@@ -9,6 +9,7 @@ mod job;
 mod routing;
 mod ssh;
 mod ssh_config;
+mod transport;
 
 use config::AppConfig;
 use tauri::Manager;
