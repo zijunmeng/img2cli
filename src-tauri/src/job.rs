@@ -23,7 +23,6 @@ use std::thread;
 
 use tauri::{AppHandle, Emitter};
 
-use crate::cli_adapter::CliAdapter;
 use crate::config::AppConfig;
 use crate::daemon::{log_message, CapturedArtifact};
 use crate::transport::ArtifactTransport;

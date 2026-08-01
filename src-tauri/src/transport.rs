@@ -42,6 +42,7 @@ pub enum TransportError {
     /// An upload (SFTP or SCP) failed.
     Upload(String),
     /// A local filesystem operation failed.
+    #[allow(dead_code)]
     LocalIo(String),
     /// A transport received a target type it doesn't handle.
     InvalidTarget(String),
@@ -64,6 +65,7 @@ impl std::fmt::Display for TransportError {
 pub enum SecretError {
     /// The keyring backend exists but could not be read (e.g. D-Bus / Secret
     /// Service unavailable). Distinct from "no entry".
+    #[allow(dead_code)]
     Backend(String),
 }
 

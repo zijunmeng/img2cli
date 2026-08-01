@@ -40,7 +40,7 @@ pub struct RouteRequest<'a> {
 }
 
 /// A resolved destination plus provenance for diagnostics.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RouteCandidate {
     pub target: DeliveryTarget,
     pub source: RouteSource,
@@ -52,13 +52,13 @@ pub struct RouteCandidate {
 
 /// Where the artifact goes. Lean domain types — resolved (no `Option` for the
 /// connection params), so transport doesn't have to deal with defaults.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum DeliveryTarget {
     Local(LocalTarget),
     Ssh(SshTarget),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LocalTarget {
     pub dir: PathBuf,
 }
@@ -66,7 +66,7 @@ pub struct LocalTarget {
 /// A connectable SSH host. All fields are resolved (port defaults to 22,
 /// username/remote_dir to their defaults) at routing time. Auth is NOT here —
 /// `ArtifactTransport` (Step 9) picks password vs key from the keyring.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SshTarget {
     pub host: String,
     pub port: u16,
@@ -74,6 +74,7 @@ pub struct SshTarget {
     pub remote_dir: String,
     /// The alias/pattern that matched (e.g. ssh-config alias or manual rule
     /// pattern) — kept for diagnostics and as the keyring identity basis.
+    #[allow(dead_code)]
     pub source_alias: Option<String>,
 }
 
@@ -105,6 +106,7 @@ pub enum RouteError {
 
 /// One step of the routing chain.
 pub trait RouteResolver: Send + Sync {
+    #[allow(dead_code)]
     fn name(&self) -> &'static str;
     fn resolve(&self, request: &RouteRequest<'_>) -> Result<Option<RouteCandidate>, RouteError>;
 }
