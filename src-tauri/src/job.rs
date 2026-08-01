@@ -273,33 +273,54 @@ fn process_job(job: &mut TransferJob) -> Result<String, AppError> {
     job.log(&format!("Image saved locally to {:?}", local_dest));
 
     // 4. Resolve destination via the routing chain
-    //    (manual rules → ssh-config auto-detect → default SSH; else local temp).
+    //    (manual rules → ssh-config auto-detect → default SSH → local).
     job.set_state(JobState::Resolving);
-    let window_title = crate::daemon::get_active_window_title();
-    if let Some(ref title) = window_title {
+    let foreground = crate::routing::ForegroundContext {
+        window_title: crate::daemon::get_active_window_title(),
+    };
+    if let Some(ref title) = foreground.window_title {
         job.log(&format!("Active window title: {:?}", title));
     }
-    let resolved = crate::resolver::resolve_target(&crate::resolver::ResolutionInput {
-        window_title: window_title.as_deref(),
-        config: &job.config,
-    });
+    // Parse ~/.ssh/config once up front; resolvers stay pure / testable.
+    let ssh_hosts = crate::ssh_config::ssh_config_path()
+        .and_then(|p| std::fs::read_to_string(&p).ok())
+        .map(|c| crate::ssh_config::parse_ssh_config(&c))
+        .unwrap_or_default();
+    let route = {
+        let request = crate::routing::RouteRequest {
+            foreground: &foreground,
+            config: &job.config,
+            ssh_hosts: &ssh_hosts,
+        };
+        match crate::routing::default_chain().resolve(&request) {
+            Ok(c) => c,
+            // LocalFallback always matches in the standard chain, so this is
+            // unreachable — handled defensively by reusing the temp file.
+            Err(crate::routing::RouteError::NoRoute) => crate::routing::RouteCandidate {
+                target: crate::routing::DeliveryTarget::Local(local_dest.clone()),
+                source: crate::routing::RouteSource::LocalFallback,
+                reason: "no route (defensive fallback)".to_string(),
+                confidence: 0,
+            },
+        }
+    };
+    job.log(&format!(
+        "Routed via {:?} (confidence {}): {}",
+        route.source, route.confidence, route.reason
+    ));
 
-    // 5. Deliver (upload / local copy / temp) and build the paste text
+    // 5. Deliver (upload / local copy) and build the paste text
     job.set_state(JobState::Uploading);
-    let paste_text = match resolved {
-        Some((crate::resolver::ResolutionCandidate::Ssh(ssh), src)) => {
+    let paste_text = match route.target {
+        crate::routing::DeliveryTarget::Ssh(ssh) => {
             let user = ssh.username.clone().unwrap_or_default();
             let identity = crate::ssh::identity_key(&user, &ssh.host, ssh.port);
             let port = ssh.port.unwrap_or(22);
-            job.log(&format!(
-                "Routed via {:?} (pattern: {:?}) — uploading to {}...",
-                src, ssh.match_pattern, ssh.host
-            ));
             let remote_result = if let Some(pw) = crate::ssh::get_stored_password(&identity) {
-                crate::ssh::upload_via_sftp(
-                    &ssh.host, port, &user, &pw, &ssh.remote_dir, &local_dest,
-                )
+                job.log(&format!("Uploading via SFTP (password) to {}...", ssh.host));
+                crate::ssh::upload_via_sftp(&ssh.host, port, &user, &pw, &ssh.remote_dir, &local_dest)
             } else {
+                job.log(&format!("Uploading via SCP (key) to {}...", ssh.host));
                 crate::daemon::upload_via_scp(&local_dest, &ssh)
             };
             match remote_result {
@@ -314,25 +335,20 @@ fn process_job(job: &mut TransferJob) -> Result<String, AppError> {
                 }
             }
         }
-        Some((crate::resolver::ResolutionCandidate::Local(dir), src)) => {
-            job.log(&format!("Routed via {:?} — copying to local {:?}", src, dir));
+        crate::routing::DeliveryTarget::Local(dir) => {
             let _ = std::fs::create_dir_all(&dir);
             let final_local_path = dir.join(&filename);
-            let local_path = if std::fs::copy(&local_dest, &final_local_path).is_ok() {
+            // Guard the self-copy: when the target dir is where the temp file
+            // already lives (the LocalFallback case), reuse it instead of
+            // copying a file onto itself (which would truncate it).
+            let local_path = if final_local_path == local_dest {
+                local_dest
+            } else if std::fs::copy(&local_dest, &final_local_path).is_ok() {
                 final_local_path
             } else {
                 local_dest
             };
             let path_str = local_path.to_string_lossy().to_string();
-            wrap_quotes(
-                format_path(&job.config.output_format, &path_str),
-                job.config.wrap_single_quotes,
-            )
-        }
-        None => {
-            // No remote target matched — use the local temp file path as-is.
-            job.log("No remote target matched — using local temp file.");
-            let path_str = local_dest.to_string_lossy().to_string();
             wrap_quotes(
                 format_path(&job.config.output_format, &path_str),
                 job.config.wrap_single_quotes,
