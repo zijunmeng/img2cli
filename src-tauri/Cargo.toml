@@ -25,7 +25,7 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread", "net", "io-util", 
 tauri-build = "2.0.0"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation", "Win32_UI_Shell"] }
+windows-sys = { version = "0.59", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation", "Win32_UI_Shell", "Win32_UI_Input_KeyboardAndMouse"] }
 keyring = { version = "3", default-features = false, features = ["windows-native"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]

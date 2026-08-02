@@ -106,7 +106,21 @@ fn copy_to_clipboard(text: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Simulate Ctrl+V (Windows/Linux) or Cmd+V (macOS) via Enigo.
+/// Simulate Ctrl+V paste. On Windows, uses native Win32 `SendInput` with
+/// virtual key codes (VK_CONTROL + 0x56) instead of Enigo's `Unicode('v')` —
+/// Enigo's approach is blocked by UIPI in many contexts. On macOS/Linux, keeps
+/// the Enigo fallback.
+#[cfg(windows)]
+fn simulate_paste() -> Result<(), String> {
+    // Preflight: wait for the user's modifier keys + V to be fully released
+    // before injecting (avoids shortcut recursion / stuck modifiers).
+    if !windows_keys_released(1000) {
+        return Err("preflight timed out: modifier keys still pressed after 1000ms".into());
+    }
+    windows_send_paste()
+}
+
+#[cfg(not(windows))]
 fn simulate_paste() -> Result<(), String> {
     let mut enigo = Enigo::new(&Settings::default())
         .map_err(|e| format!("Failed to initialize Enigo: {:?}", e))?;
@@ -125,6 +139,80 @@ fn simulate_paste() -> Result<(), String> {
         .map_err(|e| format!("Failed to click V key: {:?}", e))?;
     enigo.key(modifier, Direction::Release)
         .map_err(|e| format!("Failed to release modifier: {:?}", e))?;
+
+    Ok(())
+}
+
+// ── Windows native paste (Win32 SendInput) ────────────────────────────────
+
+/// Wait for modifier keys + V to be released (spec §8.2).
+/// Returns true if all clear within `timeout_ms`, false on timeout.
+#[cfg(windows)]
+fn windows_keys_released(timeout_ms: u64) -> bool {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
+    // VK_CONTROL(0x11) VK_MENU(0x12) VK_SHIFT(0x10) VK_LWIN(0x5B) VK_RWIN(0x5C) V(0x56)
+    let vks: [i32; 6] = [0x11, 0x12, 0x10, 0x5B, 0x5C, 0x56];
+    let start = std::time::Instant::now();
+    let timeout = std::time::Duration::from_millis(timeout_ms);
+    loop {
+        let all_released = vks.iter().all(|&vk| {
+            let state = unsafe { GetAsyncKeyState(vk) };
+            state >= 0 // MSB clear = key not currently pressed
+        });
+        if all_released {
+            return true;
+        }
+        if start.elapsed() >= timeout {
+            return false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+}
+
+/// Send Ctrl+V as four virtual-key events in a single `SendInput` call
+/// (spec §8.3). Returns Ok(()) if all 4 events were inserted, Err with
+/// diagnostics otherwise.
+#[cfg(windows)]
+fn windows_send_paste() -> Result<(), String> {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
+    };
+    use windows_sys::Win32::Foundation::GetLastError;
+
+    const VK_CTRL: u16 = 0x11;
+    const VK_V: u16 = 0x56;
+
+    let kb = |vk: u16, flags: u32| INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 {
+            ki: KEYBDINPUT { wVk: vk, wScan: 0, dwFlags: flags, time: 0, dwExtraInfo: 0 },
+        },
+    };
+
+    // All four events in ONE SendInput call (spec §8.3 requirement).
+    let inputs: [INPUT; 4] = [
+        kb(VK_CTRL, 0),               // Ctrl down
+        kb(VK_V, 0),                   // V down
+        kb(VK_V, KEYEVENTF_KEYUP),     // V up
+        kb(VK_CTRL, KEYEVENTF_KEYUP),  // Ctrl up
+    ];
+
+    let sent = unsafe {
+        SendInput(inputs.len() as u32, inputs.as_ptr(), std::mem::size_of::<INPUT>() as i32)
+    };
+
+    if sent != inputs.len() as u32 {
+        // Failure cleanup: best-effort V up + Ctrl up (spec §8.4).
+        let cleanup: [INPUT; 2] = [kb(VK_V, KEYEVENTF_KEYUP), kb(VK_CTRL, KEYEVENTF_KEYUP)];
+        let _ = unsafe {
+            SendInput(cleanup.len() as u32, cleanup.as_ptr(), std::mem::size_of::<INPUT>() as i32)
+        };
+        let err = unsafe { GetLastError() };
+        return Err(format!(
+            "SendInput: requested=4 inserted={} last_error={} — possible UIPI or focus issue",
+            sent, err
+        ));
+    }
 
     Ok(())
 }
