@@ -130,11 +130,23 @@ pub fn capture_region(
                 bytes: Cow::Owned(cropped.into_raw()),
             });
         }
-        daemon::log_message(
-            &app_handle,
-            &state.log_history,
-            "Screenshot captured to clipboard. Switch to your AI CLI and press Alt+V to upload + inject.",
-        );
+        // Dynamic hint: use the configured hotkey + injection mode (spec §11.3)
+        let (hotkey, mode) = if let Ok(cfg) = state.config.read() {
+            (cfg.global_hotkey.clone(), cfg.injection_mode)
+        } else {
+            ("Alt+V".to_string(), crate::config::InjectionMode::Auto)
+        };
+        let hint = match mode {
+            crate::config::InjectionMode::Copy => format!(
+                "Screenshot captured. Switch to your AI CLI, press {} to upload, then Ctrl+V.",
+                hotkey
+            ),
+            _ => format!(
+                "Screenshot captured. Switch to your AI CLI and press {} to upload + paste.",
+                hotkey
+            ),
+        };
+        daemon::log_message(&app_handle, &state.log_history, &hint);
         Ok(())
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]

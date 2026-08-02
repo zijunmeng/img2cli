@@ -28,7 +28,7 @@ const POST_PASTE_WAIT_MS: u64 = 500;
 pub fn inject_text(text: &str, mode: &str) -> Result<(), String> {
     match mode {
         "direct" => inject_direct(text),
-        "swap" => inject_swap(text),
+        "swap" | "auto" => inject_swap(text),
         "paste_keep" => inject_paste_keep(text),
         "copy" => copy_to_clipboard(text),
         _ => inject_direct(text),
