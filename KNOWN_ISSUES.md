@@ -29,6 +29,17 @@ This file tracks current, observable defects, platform limitations, and security
 * **Root Cause**: Windows UIPI (User Interface Privilege Isolation) prevents standard-user processes from injecting inputs into higher-integrity process windows.
 * **Solution**: The tray icon contains a `"Restart as Administrator"` action which prompts UAC elevation. Running `img2cli` as Administrator resolves this limitation.
 
+### C. VS Code Remote-SSH Terminal Paste (v0.3.10)
+
+* **Symptom**: In VS Code Remote-SSH terminals (or other contexts where synthetic input is restricted), auto-paste may be blocked by the system.
+* **v0.3.10 improvement**: img2cli now uses Win32 `SendInput` (virtual key codes `VK_CONTROL` + `VK_V`) instead of Enigo's `Unicode('v')` character simulation. Virtual keys use a different Windows input path and are more robust against UIPI and input filtering.
+* **Auto-degradation**: If auto-paste fails (SendInput returns <4 events, or preflight times out waiting for modifier keys to release), img2cli automatically copies the reference path to the clipboard and enters `ReadyToPaste` state (NOT `Failed`). The image was still uploaded successfully — just press `Ctrl+V` manually.
+* **Recommended settings for VS Code Remote / Claude Code**:
+  1. Output Format → **Raw Path** (bare absolute path; Claude Code recognizes it as an image attachment → `[Image #N]`)
+  2. Wrap in Single Quotes → **OFF**
+  3. Injection Mode → **Auto** (tries native paste, falls back to copy)
+  4. **Restart as Administrator** (tray menu) for best SendInput reliability
+
 ---
 
 ## 3. macOS-Specific Issues
