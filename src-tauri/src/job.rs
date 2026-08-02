@@ -271,7 +271,7 @@ fn process_job(job: &mut TransferJob) -> Result<String, AppError> {
         let paste_text = wrap_quotes(capture_result, job.config.wrap_single_quotes);
         job.log("Base64 image generated. Injecting data URI...");
         job.set_state(JobState::Injecting);
-        crate::injector::inject_text(&paste_text, &job.config.injection_mode)
+        crate::injector::inject_text(&paste_text, job.config.injection_mode.as_str())
             .map_err(AppError::Injection)?;
         return Ok(paste_text);
     }
