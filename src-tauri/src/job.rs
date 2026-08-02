@@ -210,7 +210,10 @@ fn worker_loop(rx: Receiver<TransferJob>) {
             }
             Ok(Err(e)) => {
                 job.state = JobState::Failed;
-                // The failing step already wrote a diagnostic line via job.log().
+                // Log the failure reason to the System Logs tab (not just the
+                // event stream) — otherwise capture/keyring/upload errors are
+                // silent in the UI the user actually reads.
+                job.log(&format!("Job #{} failed: {}", job.id, e));
                 let _ = job.app_handle.emit(
                     "job_event",
                     JobEvent::Failed {
@@ -327,25 +330,24 @@ fn process_job(job: &mut TransferJob) -> Result<String, AppError> {
         }
     };
     job.log(&format!("Delivered: {}", delivered.delivered_path));
-    // "copy" mode = bare absolute path on the clipboard (Claude Code attaches a
-    // pasted absolute image path as `[Image #N]`). Other modes render via the
-    // configured output format (markdown/html/raw) + optional quote wrapping.
-    let paste_text = match job.config.injection_mode.as_str() {
-        "copy" => delivered.delivered_path.clone(),
-        _ => wrap_quotes(
-            crate::cli_adapter::adapter_for(&job.config.output_format)
-                .render(&delivered.delivered_path),
-            job.config.wrap_single_quotes,
-        ),
-    };
+    // The paste-text CONTENT is always decided by output_format (+ optional
+    // quote wrap). injection_mode only controls HOW it's delivered
+    // (direct/swap/paste_keep/copy), never the text itself.
+    let paste_text = wrap_quotes(
+        crate::cli_adapter::adapter_for(&job.config.output_format)
+            .render(&delivered.delivered_path),
+        job.config.wrap_single_quotes,
+    );
 
-    // 6. Inject / copy the paste link (serialized by the single worker)
+    // 6. Inject / copy the paste link (serialized by the single worker).
+    //    Log the mode + the FOREGROUND WINDOW AT INJECTION TIME (not the
+    //    routing-time window — focus may have changed during upload).
     job.set_state(JobState::Injecting);
-    if job.config.injection_mode == "copy" {
-        job.log(&format!("Path copied to clipboard: {} — paste (Ctrl+V) in your AI CLI", paste_text));
-    } else {
-        job.log(&format!("Injecting paste link: {}", paste_text));
-    }
+    let inject_window = crate::daemon::get_active_window_title();
+    job.log(&format!(
+        "[{}] {} | target: {:?}",
+        job.config.injection_mode, paste_text, inject_window
+    ));
     crate::injector::inject_text(&paste_text, &job.config.injection_mode)
         .map_err(AppError::Injection)?;
 
