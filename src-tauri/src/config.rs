@@ -58,12 +58,20 @@ pub struct AppConfig {
     #[serde(default = "default_upload_strategy")]
     pub upload_strategy: String, // "eager" or "lazy"
     #[serde(default = "default_injection_mode")]
-    pub injection_mode: String,  // "direct" or "swap"
+    pub injection_mode: InjectionMode,
     #[serde(default = "default_clean_keep_days")]
     pub clean_keep_days: u32,
     #[serde(default = "default_theme")]
     pub theme: String,
-    
+
+    // v0.3.10 injection tuning (spec §12)
+    #[serde(default = "default_post_paste_wait_ms")]
+    pub post_paste_wait_ms: u32,
+    #[serde(default = "default_input_release_timeout_ms")]
+    pub input_release_timeout_ms: u32,
+    #[serde(default = "default_fallback_to_copy")]
+    pub fallback_to_copy: bool,
+
     #[serde(default)]
     pub ssh: Option<SshConfig>,
     #[serde(default)]
@@ -81,9 +89,43 @@ fn default_enable_notifications() -> bool { true }
 fn default_global_hotkey() -> String { "Alt+V".to_string() }
 fn default_screenshot_hotkey() -> String { "Alt+Shift+S".to_string() }
 fn default_upload_strategy() -> String { "eager".to_string() }
-fn default_injection_mode() -> String { "direct".to_string() }
 fn default_clean_keep_days() -> u32 { 1 }
 fn default_theme() -> String { "apple-dark".to_string() }
+fn default_post_paste_wait_ms() -> u32 { 500 }
+fn default_input_release_timeout_ms() -> u32 { 1000 }
+fn default_fallback_to_copy() -> bool { true }
+
+/// How the generated paste-text is delivered to the AI CLI (v0.3.10 spec §6.1).
+/// serde `rename_all = "snake_case"` keeps backward compat with v0.3.9 string
+/// values (`"direct"`, `"swap"`, `"paste_keep"`, `"copy"`). Missing → `Auto`;
+/// illegal value → config-load error (not silently `Direct`).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum InjectionMode {
+    Auto,
+    Direct,
+    Swap,
+    PasteKeep,
+    Copy,
+}
+
+fn default_injection_mode() -> InjectionMode {
+    InjectionMode::Auto
+}
+
+impl InjectionMode {
+    /// snake_case string used by the injector's match arms (backward compat
+    /// with v0.3.9's string-based dispatch).
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            InjectionMode::Auto => "auto",
+            InjectionMode::Direct => "direct",
+            InjectionMode::Swap => "swap",
+            InjectionMode::PasteKeep => "paste_keep",
+            InjectionMode::Copy => "copy",
+        }
+    }
+}
 
 impl Default for AppConfig {
     fn default() -> Self {
@@ -102,6 +144,9 @@ impl Default for AppConfig {
             injection_mode: default_injection_mode(),
             clean_keep_days: default_clean_keep_days(),
             theme: default_theme(),
+            post_paste_wait_ms: default_post_paste_wait_ms(),
+            input_release_timeout_ms: default_input_release_timeout_ms(),
+            fallback_to_copy: default_fallback_to_copy(),
             ssh: Some(SshConfig {
                 enabled: false,
                 host: "your_ssh_alias_or_ip".to_string(),

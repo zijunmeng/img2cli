@@ -85,6 +85,7 @@ pub enum JobState {
     Uploading,
     Injecting,
     Completed,
+    ReadyToPaste,
     Failed,
     Cancelled,
 }
@@ -153,6 +154,7 @@ pub enum JobEvent {
     Created { id: JobId },
     StateChanged { id: JobId, state: JobState },
     Completed { id: JobId, paste_text: String },
+    ReadyToPaste { id: JobId, paste_text: String, reason: String },
     Failed { id: JobId, error: String },
 }
 
@@ -346,9 +348,9 @@ fn process_job(job: &mut TransferJob) -> Result<String, AppError> {
     let inject_window = crate::daemon::get_active_window_title();
     job.log(&format!(
         "[{}] {} | target: {:?}",
-        job.config.injection_mode, paste_text, inject_window
+        job.config.injection_mode.as_str(), paste_text, inject_window
     ));
-    crate::injector::inject_text(&paste_text, &job.config.injection_mode)
+    crate::injector::inject_text(&paste_text, job.config.injection_mode.as_str())
         .map_err(AppError::Injection)?;
 
     Ok(paste_text)
