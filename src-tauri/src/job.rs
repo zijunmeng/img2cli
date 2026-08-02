@@ -327,15 +327,25 @@ fn process_job(job: &mut TransferJob) -> Result<String, AppError> {
         }
     };
     job.log(&format!("Delivered: {}", delivered.delivered_path));
-    let paste_text = wrap_quotes(
-        crate::cli_adapter::adapter_for(&job.config.output_format)
-            .render(&delivered.delivered_path),
-        job.config.wrap_single_quotes,
-    );
+    // "copy" mode = bare absolute path on the clipboard (Claude Code attaches a
+    // pasted absolute image path as `[Image #N]`). Other modes render via the
+    // configured output format (markdown/html/raw) + optional quote wrapping.
+    let paste_text = match job.config.injection_mode.as_str() {
+        "copy" => delivered.delivered_path.clone(),
+        _ => wrap_quotes(
+            crate::cli_adapter::adapter_for(&job.config.output_format)
+                .render(&delivered.delivered_path),
+            job.config.wrap_single_quotes,
+        ),
+    };
 
-    // 6. Inject paste link into focused terminal (serialized by the worker)
+    // 6. Inject / copy the paste link (serialized by the single worker)
     job.set_state(JobState::Injecting);
-    job.log(&format!("Injecting paste link: {}", paste_text));
+    if job.config.injection_mode == "copy" {
+        job.log(&format!("Path copied to clipboard: {} — paste (Ctrl+V) in your AI CLI", paste_text));
+    } else {
+        job.log(&format!("Injecting paste link: {}", paste_text));
+    }
     crate::injector::inject_text(&paste_text, &job.config.injection_mode)
         .map_err(AppError::Injection)?;
 

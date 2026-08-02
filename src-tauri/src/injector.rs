@@ -7,8 +7,26 @@ pub fn inject_text(text: &str, mode: &str) -> Result<(), String> {
     match mode {
         "direct" => inject_direct(text),
         "swap" => inject_swap(text),
+        "copy" => copy_to_clipboard(text),
         _ => inject_direct(text),
     }
+}
+
+/// Copy the text to the clipboard and stop — no keystroke injection.
+///
+/// For terminals that reject synthetic input (notably VSCode's remote terminal
+/// running an AI CLI like Claude Code): img2cli's Enigo-based `direct`/`swap`
+/// injection is ignored, so nothing appears. With `copy`, img2cli just puts the
+/// path on the clipboard and the user pastes manually (a real keypress the
+/// terminal accepts). Claude Code turns a pasted absolute image path into an
+/// attached image (`[Image #N]`), so this is the reliable path for that case.
+fn copy_to_clipboard(text: &str) -> Result<(), String> {
+    let mut clipboard = Clipboard::new()
+        .map_err(|e| format!("Failed to open clipboard: {}", e))?;
+    clipboard
+        .set_text(text.to_string())
+        .map_err(|e| format!("Failed to set clipboard text: {}", e))?;
+    Ok(())
 }
 
 pub fn inject_direct(text: &str) -> Result<(), String> {

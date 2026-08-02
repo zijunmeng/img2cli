@@ -164,6 +164,7 @@
                 <select v-model="config.injection_mode" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)]">
                   <option value="direct">Direct Native Keystrokes (Bypasses IME)</option>
                   <option value="swap">Quick Clipboard Swap & Paste</option>
+                  <option value="copy">Copy Path to Clipboard (manual paste — for VSCode remote / Claude Code)</option>
                 </select>
               </div>
 
