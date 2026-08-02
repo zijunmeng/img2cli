@@ -1158,8 +1158,13 @@ onMounted(() => {
     
     // Fetch the captured screen image from Rust memory
     invoke('get_captured_image')
-      .then((src) => {
+      .then(async (src) => {
         capturedImageSrc.value = src;
+        // The overlay window was built hidden (capture.rs visible:false)) so the
+        // WebView's initial white frame never shows. Reveal it only after the
+        // frozen frame has rendered → flash-free, Snipaste-style.
+        await nextTick();
+        try { await invoke('show_capture_overlay'); } catch (_) {}
       })
       .catch((e) => {
         console.error("Failed to load captured image:", e);

@@ -45,6 +45,7 @@ pub fn open_capture_overlay(app: &AppHandle) {
         .decorations(false)
         .always_on_top(true)
         .skip_taskbar(true)
+        .visible(false)
         .build();
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
@@ -113,19 +114,27 @@ pub fn capture_region(
             
         let cropped = image::imageops::crop_imm(&full, cx, cy, cw, ch).to_image();
 
-        // Write to clipboard so the user can still Ctrl+V the image to WeChat.
-        // Non-fatal — if it fails, the pipeline still processes the artifact.
+        // v0.3.7: Alt+Z now captures ONLY — it puts the image in the clipboard
+        // and stops. The screenshot subject and the AI CLI are rarely on screen
+        // at the same time, so the old "capture + immediately upload + inject"
+        // behavior sent the path into the wrong window. Now the user switches
+        // to the AI CLI and presses Alt+V, which reads this clipboard image and
+        // uploads + injects. The same clipboard image can also be Ctrl+V'd into
+        // WeChat / QQ / Feishu.
+        let cw = cropped.width();
+        let ch = cropped.height();
         if let Ok(mut cb) = arboard::Clipboard::new() {
             let _ = cb.set_image(arboard::ImageData {
-                width: cropped.width() as usize,
-                height: cropped.height() as usize,
-                bytes: Cow::Owned(cropped.clone().into_raw()),
+                width: cw as usize,
+                height: ch as usize,
+                bytes: Cow::Owned(cropped.into_raw()),
             });
         }
-
-        // Pass artifact directly — no clipboard round-trip.
-        let artifact = daemon::CapturedArtifact::new(cropped, daemon::CaptureSource::Region);
-        daemon::trigger_with_artifact(&app_handle, state.inner(), Some(artifact));
+        daemon::log_message(
+            &app_handle,
+            &state.log_history,
+            "Screenshot captured to clipboard. Switch to your AI CLI and press Alt+V to upload + inject.",
+        );
         Ok(())
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
@@ -140,6 +149,20 @@ pub fn capture_region(
 pub fn cancel_capture(app_handle: AppHandle) -> Result<(), String> {
     close_capture_overlay(&app_handle);
     Ok(())
+}
+
+/// Reveal the capture overlay after its frozen frame has rendered. The overlay
+/// is built hidden (open_capture_overlay: visible(false)) so the WebView's
+/// initial white frame never shows; the frontend calls this once the image is
+/// on screen, giving a flash-free reveal (Snipaste-style). Done as a custom
+/// command because the capture window isn't in the capability allowlist, so the
+/// core `window.show()` IPC would be denied — custom commands aren't gated.
+#[tauri::command]
+pub fn show_capture_overlay(app_handle: AppHandle) {
+    if let Some(win) = app_handle.get_webview_window("capture") {
+        let _ = win.show();
+        let _ = win.set_focus();
+    }
 }
 
 fn base64_encode(data: &[u8]) -> String {
