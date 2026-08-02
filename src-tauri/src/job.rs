@@ -158,6 +158,20 @@ pub enum JobEvent {
     Failed { id: JobId, error: String },
 }
 
+/// Result of the injection attempt (spec §6.4). `ReadyToPaste` = auto-injection
+/// failed but the reference was copied to clipboard; user just presses Ctrl+V.
+#[derive(Debug, Clone)]
+pub enum InjectionOutcome {
+    Injected,
+    ReadyToPaste { reason: String },
+}
+
+/// process_job return: the paste text + how injection went (spec §9).
+pub struct JobCompletion {
+    pub paste_text: String,
+    pub injection: InjectionOutcome,
+}
+
 // ── JobManager (Step 5) ───────────────────────────────────────────────────
 
 pub struct JobManager {
@@ -200,15 +214,30 @@ fn worker_loop(rx: Receiver<TransferJob>) {
             process_job(&mut job)
         }));
         match result {
-            Ok(Ok(paste_text)) => {
-                job.state = JobState::Completed;
-                let _ = job.app_handle.emit(
-                    "job_event",
-                    JobEvent::Completed {
-                        id: job.id,
-                        paste_text,
-                    },
-                );
+            Ok(Ok(completion)) => {
+                match completion.injection {
+                    InjectionOutcome::Injected => {
+                        job.state = JobState::Completed;
+                        let _ = job.app_handle.emit(
+                            "job_event",
+                            JobEvent::Completed {
+                                id: job.id,
+                                paste_text: completion.paste_text,
+                            },
+                        );
+                    }
+                    InjectionOutcome::ReadyToPaste { reason } => {
+                        job.state = JobState::ReadyToPaste;
+                        let _ = job.app_handle.emit(
+                            "job_event",
+                            JobEvent::ReadyToPaste {
+                                id: job.id,
+                                paste_text: completion.paste_text,
+                                reason,
+                            },
+                        );
+                    }
+                }
             }
             Ok(Err(e)) => {
                 job.state = JobState::Failed;
@@ -245,7 +274,7 @@ fn worker_loop(rx: Receiver<TransferJob>) {
 ///
 /// Routing itself lives in `resolver::resolve_target` (Step 8); this function
 /// is now just orchestration: capture → resolve → deliver → inject.
-fn process_job(job: &mut TransferJob) -> Result<String, AppError> {
+fn process_job(job: &mut TransferJob) -> Result<JobCompletion, AppError> {
     job.set_state(JobState::Processing);
 
     // 1. Temp filename + local dir
@@ -271,9 +300,8 @@ fn process_job(job: &mut TransferJob) -> Result<String, AppError> {
         let paste_text = wrap_quotes(capture_result, job.config.wrap_single_quotes);
         job.log("Base64 image generated. Injecting data URI...");
         job.set_state(JobState::Injecting);
-        crate::injector::inject_text(&paste_text, job.config.injection_mode.as_str())
-            .map_err(AppError::Injection)?;
-        return Ok(paste_text);
+        let outcome = inject_with_fallback(job, &paste_text)?;
+        return Ok(JobCompletion { paste_text, injection: outcome });
     }
 
     job.log(&format!("Image saved locally to {:?}", local_dest));
@@ -350,10 +378,9 @@ fn process_job(job: &mut TransferJob) -> Result<String, AppError> {
         "[{}] {} | target: {:?}",
         job.config.injection_mode.as_str(), paste_text, inject_window
     ));
-    crate::injector::inject_text(&paste_text, job.config.injection_mode.as_str())
-        .map_err(AppError::Injection)?;
+    let outcome = inject_with_fallback(job, &paste_text)?;
 
-    Ok(paste_text)
+    Ok(JobCompletion { paste_text, injection: outcome })
 }
 
 fn wrap_quotes(s: String, wrap: bool) -> String {
@@ -361,6 +388,31 @@ fn wrap_quotes(s: String, wrap: bool) -> String {
         format!("'{}'", s)
     } else {
         s
+    }
+}
+
+/// Try the configured injection mode; on failure, fall back to copy (spec §9).
+/// Returns Injected on success, ReadyToPaste if copy fallback succeeded,
+/// or Err if BOTH injection and copy failed (genuine failure).
+fn inject_with_fallback(job: &TransferJob, paste_text: &str) -> Result<InjectionOutcome, AppError> {
+    match crate::injector::inject_text(paste_text, job.config.injection_mode.as_str()) {
+        Ok(()) => Ok(InjectionOutcome::Injected),
+        Err(e) => {
+            // Auto-injection failed. Don't fail the job — the image was already
+            // uploaded successfully. Copy the path to clipboard as fallback.
+            job.log(&format!("Auto-injection failed: {}. Falling back to copy.", e));
+            match crate::injector::inject_text(paste_text, "copy") {
+                Ok(()) => {
+                    job.log("Reference copied to clipboard. Press Ctrl+V in your AI CLI.");
+                    Ok(InjectionOutcome::ReadyToPaste { reason: e })
+                }
+                Err(copy_err) => {
+                    Err(AppError::Injection(format!(
+                        "{}; copy fallback also failed: {}", e, copy_err
+                    )))
+                }
+            }
+        }
     }
 }
 
