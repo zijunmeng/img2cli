@@ -1,9 +1,22 @@
 <template>
   <!-- Region-capture overlay (screenshot hotkey opens index.html?capture=1) -->
-  <div v-if="captureMode" class="fixed inset-0 z-[9999] cursor-crosshair select-none" @mousedown="capDown" @mousemove="capMove" @mouseup="capUp">
+  <div v-if="captureMode" class="fixed inset-0 z-[9999] cursor-crosshair select-none"
+       @mousedown="capMouseDown" @mousemove="capMouseMove" @mouseup="capMouseUp">
     <img v-if="capturedImageSrc" :src="capturedImageSrc" class="absolute inset-0 w-full h-full object-cover pointer-events-none" />
-    <div class="absolute top-5 left-1/2 -translate-x-1/2 text-white text-sm bg-black/70 px-4 py-1.5 rounded-full pointer-events-none shadow-lg z-[10000]">Drag to select a region · Esc to cancel</div>
-    <div v-if="cap.active" :style="capRectStyle" class="absolute border-2 border-[var(--color-accent)] pointer-events-none z-[10000]" style="background: transparent; box-shadow: 0 0 0 9999px rgba(0,0,0,0.4)"></div>
+    <div v-if="!hasRect" class="absolute top-5 left-1/2 -translate-x-1/2 text-white text-sm bg-black/70 px-4 py-1.5 rounded-full pointer-events-none shadow-lg z-[10000]">Drag to select · Enter to save · Esc to cancel</div>
+    <div v-if="hasRect" :style="rectStyle" @mousedown.stop="startMove"
+         class="absolute border border-[#2997ff] box-border cursor-move z-[10000]"
+         style="box-shadow: 0 0 0 9999px rgba(0,0,0,0.45)">
+      <div v-for="hd in handles" :key="hd" :style="handleStyle(hd)" :class="handleCursorClass(hd)"
+           @mousedown.stop.prevent="startResize(hd, $event)"
+           class="absolute w-2.5 h-2.5 bg-white border border-[#2997ff] rounded-sm shadow"></div>
+      <div :style="toolbarStyle" @mousedown.stop
+           class="absolute flex items-center gap-1 bg-[#1a1a1a]/95 rounded-md px-1.5 py-1 text-white text-xs shadow-lg">
+        <span class="px-1 tabular-nums text-white/80">{{ Math.round(rect.w) }} × {{ Math.round(rect.h) }}</span>
+        <button @click.stop="confirmRect" class="px-2 py-0.5 rounded bg-[#2997ff] hover:brightness-110 font-medium">✓ Save</button>
+        <button @click.stop="cancelRect" class="px-1.5 py-0.5 rounded hover:bg-white/15">✕</button>
+      </div>
+    </div>
   </div>
   <div 
     v-else 
@@ -986,26 +999,87 @@ const recordShotKeydown = (e) => {
 };
 
 // ---- Region-capture overlay (the ?capture=1 window) ----
+// Snipaste-style: drag to draw a selection; it then persists with 8 resize
+// handles + move, editable until the user confirms (✓ button / Enter) or
+// cancels (✕ / Esc). Clicking outside the selection starts a new one.
 const captureMode = ref(false);
 const capturedImageSrc = ref('');
-const cap = ref({ active: false, x0: 0, y0: 0, x1: 0, y1: 0 });
-const capRectStyle = computed(() => ({
-  left: Math.min(cap.value.x0, cap.value.x1) + 'px',
-  top: Math.min(cap.value.y0, cap.value.y1) + 'px',
-  width: Math.abs(cap.value.x1 - cap.value.x0) + 'px',
-  height: Math.abs(cap.value.y1 - cap.value.y0) + 'px'
-}));
-const capDown = (e) => { cap.value = { active: true, x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY }; };
-const capMove = (e) => { if (cap.value.active) { cap.value.x1 = e.clientX; cap.value.y1 = e.clientY; } };
-const capUp = async (e) => {
-  cap.value.active = false;
-  const x = Math.round(Math.min(cap.value.x0, e.clientX));
-  const y = Math.round(Math.min(cap.value.y0, e.clientY));
-  const w = Math.round(Math.abs(e.clientX - cap.value.x0));
-  const h = Math.round(Math.abs(e.clientY - cap.value.y0));
-  if (w < 4 || h < 4) { try { await invoke('cancel_capture'); } catch (_) {} return; }
-  try { await invoke('capture_region', { x, y, w, h }); } catch (_) { try { await invoke('cancel_capture'); } catch (_) {} }
+const rect = ref({ x: 0, y: 0, w: 0, h: 0 });               // normalized selection, CSS px
+const hasRect = computed(() => rect.value.w >= 4 && rect.value.h >= 4);
+const capAction = ref(null);                                  // 'draw' | 'move' | 'resize' | null
+const capHandle = ref(null);
+const capOrigin = ref({ mx: 0, my: 0, rect: null });
+
+const rectStyle = computed(() => ({ left: rect.value.x + 'px', top: rect.value.y + 'px', width: rect.value.w + 'px', height: rect.value.h + 'px' }));
+const toolbarStyle = computed(() => {
+  const below = rect.value.y + rect.value.h + 40 <= window.innerHeight;
+  return { right: '0px', top: below ? rect.value.h + 8 + 'px' : '-32px' };
+});
+const handles = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+const handlePos = { nw: [0, 0], n: [0.5, 0], ne: [1, 0], e: [1, 0.5], se: [1, 1], s: [0.5, 1], sw: [0, 1], w: [0, 0.5] };
+const handleStyle = (hd) => {
+  const [fx, fy] = handlePos[hd];
+  return { left: `calc(${fx * 100}% - 5px)`, top: `calc(${fy * 100}% - 5px)` };
 };
+const handleCursorClass = (hd) => ({
+  nw: 'cursor-nwse-resize', se: 'cursor-nwse-resize',
+  ne: 'cursor-nesw-resize', sw: 'cursor-nesw-resize',
+  n: 'cursor-ns-resize', s: 'cursor-ns-resize',
+  e: 'cursor-ew-resize', w: 'cursor-ew-resize',
+}[hd]);
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+const capMouseDown = (e) => {
+  // Fires only for clicks OUTSIDE the selection rect (inside-rect clicks are
+  // caught by the rect's @mousedown.stop) → start drawing a fresh selection.
+  capAction.value = 'draw';
+  rect.value = { x: e.clientX, y: e.clientY, w: 0, h: 0 };
+  capOrigin.value = { mx: e.clientX, my: e.clientY, rect: null };
+};
+const startMove = (e) => {
+  capAction.value = 'move';
+  capOrigin.value = { mx: e.clientX, my: e.clientY, rect: { ...rect.value } };
+};
+const startResize = (hd, e) => {
+  capAction.value = 'resize';
+  capHandle.value = hd;
+  capOrigin.value = { mx: e.clientX, my: e.clientY, rect: { ...rect.value } };
+};
+const capMouseMove = (e) => {
+  if (!capAction.value) return;
+  const mx = e.clientX, my = e.clientY;
+  const winW = window.innerWidth, winH = window.innerHeight;
+  if (capAction.value === 'draw') {
+    const o = capOrigin.value;
+    rect.value = { x: Math.min(o.mx, mx), y: Math.min(o.my, my), w: Math.abs(mx - o.mx), h: Math.abs(my - o.my) };
+  } else if (capAction.value === 'move') {
+    const o = capOrigin.value;
+    rect.value = {
+      x: clamp(o.rect.x + (mx - o.mx), 0, winW - o.rect.w),
+      y: clamp(o.rect.y + (my - o.my), 0, winH - o.rect.h),
+      w: o.rect.w, h: o.rect.h,
+    };
+  } else if (capAction.value === 'resize') {
+    const o = capOrigin.value;
+    const hd = capHandle.value;
+    let { x, y, w, h } = o.rect;
+    const right = x + w, bottom = y + h;
+    if (hd.includes('w')) { x = clamp(mx, 0, right - 4); w = right - x; }
+    if (hd.includes('e')) { w = Math.max(4, clamp(mx, 0, winW) - x); }
+    if (hd.includes('n')) { y = clamp(my, 0, bottom - 4); h = bottom - y; }
+    if (hd.includes('s')) { h = Math.max(4, clamp(my, 0, winH) - y); }
+    rect.value = { x, y, w, h };
+  }
+};
+const capMouseUp = () => { capAction.value = null; };
+
+const confirmRect = async () => {
+  const r = rect.value;
+  if (r.w < 4 || r.h < 4) { try { await invoke('cancel_capture'); } catch (_) {} return; }
+  try { await invoke('capture_region', { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h) }); }
+  catch (_) { try { await invoke('cancel_capture'); } catch (_) {} }
+};
+const cancelRect = async () => { try { await invoke('cancel_capture'); } catch (_) {} };
 
 // Clear stored SSH passwords from the OS keyring.
 const clearDefaultPassword = async () => {
@@ -1154,7 +1228,10 @@ onMounted(() => {
   if (params.get('capture') === '1') {
     // This webview is the region-capture overlay (loaded by the screenshot hotkey).
     captureMode.value = true;
-    window.addEventListener('keydown', (e) => { if (e.key === 'Escape') invoke('cancel_capture'); });
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') invoke('cancel_capture');
+      else if (e.key === 'Enter' && hasRect.value) confirmRect();
+    });
     
     // Fetch the captured screen image from Rust memory
     invoke('get_captured_image')
