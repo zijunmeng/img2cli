@@ -60,3 +60,7 @@ jobs:
       - name: Cargo check (Rust type-check, incl. tests)
         working-directory: src-tauri
         run: cargo check --all-targets
+
+      - name: Cargo test (run unit tests)
+        working-directory: src-tauri
+        run: cargo test
