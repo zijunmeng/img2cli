@@ -2,6 +2,8 @@
 
 This file tracks current, observable defects, platform limitations, and security/UI boundaries. Future plans belong in [ROADMAP.md](ROADMAP.md); completed changes belong in git history.
 
+**Editorial principle:** record a **reproducible test matrix + recommended strategy** over inferred root cause — inferred mechanisms go stale the moment a platform updates. The injection baseline lives in [docs/ISSUES_20260809.md](docs/ISSUES_20260809.md); keep this file consistent with it.
+
 ---
 
 ## 1. Platform Support Matrix
@@ -29,16 +31,31 @@ This file tracks current, observable defects, platform limitations, and security
 * **Root Cause**: Windows UIPI (User Interface Privilege Isolation) prevents standard-user processes from injecting inputs into higher-integrity process windows.
 * **Solution**: The tray icon contains a `"Restart as Administrator"` action which prompts UAC elevation. Running `img2cli` as Administrator resolves this limitation.
 
-### C. VS Code Remote-SSH Terminal Paste (v0.3.10)
+### C. Synthetic-Input Injection & Host Compatibility (VS Code, Orca, browsers)
 
-* **Symptom**: In VS Code Remote-SSH terminals (or other contexts where synthetic input is restricted), auto-paste may be blocked by the system.
-* **v0.3.10 improvement**: img2cli now uses Win32 `SendInput` (virtual key codes `VK_CONTROL` + `VK_V`) instead of Enigo's `Unicode('v')` character simulation. Virtual keys use a different Windows input path and are more robust against UIPI and input filtering.
-* **Auto-degradation**: If auto-paste fails (SendInput returns <4 events, or preflight times out waiting for modifier keys to release), img2cli automatically copies the reference path to the clipboard and enters `ReadyToPaste` state (NOT `Failed`). The image was still uploaded successfully — just press `Ctrl+V` manually.
-* **Recommended settings for VS Code Remote / Claude Code**:
-  1. Output Format → **Raw Path** (bare absolute path; Claude Code recognizes it as an image attachment → `[Image #N]`)
-  2. Wrap in Single Quotes → **OFF**
-  3. Injection Mode → **Auto** (tries native paste, falls back to copy)
-  4. **Restart as Administrator** (tray menu) for best SendInput reliability
+> Recorded as a **reproducible test matrix + recommended strategy**, not as proven root cause. Internal filtering mechanisms are working hypotheses — full baseline in [docs/ISSUES_20260809.md](docs/ISSUES_20260809.md). This framing keeps the section accurate across Windows / VS Code updates.
+
+**Observed host matrix (2026-08-09):**
+
+| Host | Virtual-key Ctrl+V (Auto / Swap / PasteKeep) | Enigo Unicode (Direct) |
+| --- | --- | --- |
+| Plain terminal (Windows Terminal / cmd / Claude Code run directly) | ✅ | ✅¹ |
+| **VS Code integrated terminal** | ❌ (`SendInput` returns `inserted=0`) | ✅ as Administrator |
+| **Orca agent terminal** (onorca.dev) | ❌ | ❌ (even as Administrator) |
+| Browser tab (web-based AI) | ❌ | not tested |
+
+¹ Direct is bounded by UIPI: img2cli's integrity must be ≥ the target window. Same-integrity works without elevation; injecting into an elevated window requires img2cli itself to be elevated.
+
+**Auto-degradation (still accurate for virtual-key modes):** When `SendInput` returns `<4` events (virtual keys) or the preflight times out waiting for modifier keys to release, img2cli copies the reference path to the clipboard and enters `ReadyToPaste` (NOT `Failed`). The image was still uploaded — press `Ctrl+V` manually.
+
+**Silent-failure gap (Direct mode):** Enigo's `text()` returns `Ok` whenever `SendInput` queues the events — even if the host ignores them downstream (Orca). So **no fallback fires** and the path lands in *neither* the target nor the clipboard. This is the worst failure mode; fixing it (define success as verifiable delivery, keep a clipboard copy) is the baseline's P0.
+
+**Recommended strategy:**
+* **VS Code (Claude Code / Codex inside):** Injection Mode → **Direct** + *Restart as Administrator*. (Auto/Swap virtual-key Ctrl+V is rejected here.)
+* **Orca / hosts that reject Direct too:** Injection Mode → **Copy Only** + manual `Ctrl+V`.
+* **Claude Code path format:** Output Format → **Raw Path** (bare absolute path → `[Image #N]`); Wrap in Single Quotes → **OFF**.
+
+**Not proven:** whether hosts filter on the `LLKHF_INJECTED` flag, DOM `isTrusted`, or something else. Treat as hypothesis — re-test per host if behavior changes.
 
 ---
 
