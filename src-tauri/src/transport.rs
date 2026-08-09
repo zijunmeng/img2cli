@@ -209,9 +209,19 @@ pub fn default_transport() -> DefaultTransport {
 mod tests {
     use super::*;
     use crate::routing::{DeliveryTarget, LocalTarget, SshTarget};
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    // Monotonic counter so each artifact()/output dir is unique. The transport
+    // tests run in parallel; sharing one temp/src.jpg raced the `fs::write` in
+    // artifact() (Windows ERROR_SHARING_VIOLATION code 32; read/write
+    // collisions on Unix). Unique dirs isolate each test.
+    static SEQ: AtomicU64 = AtomicU64::new(0);
 
     fn artifact() -> ProcessedArtifact {
-        let dir = std::env::temp_dir().join("img2cli_transport_test");
+        let dir = std::env::temp_dir().join(format!(
+            "img2cli_transport_test_{}",
+            SEQ.fetch_add(1, Ordering::Relaxed)
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         let p = dir.join("src.jpg");
         std::fs::write(&p, b"x").unwrap();
@@ -243,8 +253,10 @@ mod tests {
     #[test]
     fn local_transport_copies_to_target_dir() {
         let a = artifact();
-        let out = std::env::temp_dir().join("img2cli_transport_out");
-        let _ = std::fs::remove_dir_all(&out);
+        let out = std::env::temp_dir().join(format!(
+            "img2cli_transport_out_{}",
+            SEQ.fetch_add(1, Ordering::Relaxed)
+        ));
         let t = DeliveryTarget::Local(LocalTarget { dir: out.clone() });
         let d = LocalTransport.deliver(&a, &t).expect("local deliver");
         assert!(d.delivered_path.ends_with("src.jpg"));
