@@ -23,7 +23,7 @@ use std::thread;
 
 use tauri::{AppHandle, Emitter};
 
-use crate::config::AppConfig;
+use crate::config::{AppConfig, InjectionMode};
 use crate::daemon::{log_message, CapturedArtifact};
 use crate::transport::ArtifactTransport;
 
@@ -300,7 +300,15 @@ fn process_job(job: &mut TransferJob) -> Result<JobCompletion, AppError> {
         let paste_text = wrap_quotes(capture_result, job.config.wrap_single_quotes);
         job.log("Base64 image generated. Injecting data URI...");
         job.set_state(JobState::Injecting);
-        let outcome = inject_with_fallback(job, &paste_text)?;
+        let inject_window = crate::daemon::get_active_window_title();
+        let effective_mode = resolve_effective_mode(job, &inject_window);
+        job.log(&format!(
+            "[{}] {} | target: {:?}",
+            effective_mode.as_str(),
+            paste_text,
+            inject_window
+        ));
+        let outcome = inject_with_fallback(job, &paste_text, effective_mode)?;
         return Ok(JobCompletion { paste_text, injection: outcome });
     }
 
@@ -374,11 +382,14 @@ fn process_job(job: &mut TransferJob) -> Result<JobCompletion, AppError> {
     //    routing-time window — focus may have changed during upload).
     job.set_state(JobState::Injecting);
     let inject_window = crate::daemon::get_active_window_title();
+    let effective_mode = resolve_effective_mode(job, &inject_window);
     job.log(&format!(
         "[{}] {} | target: {:?}",
-        job.config.injection_mode.as_str(), paste_text, inject_window
+        effective_mode.as_str(),
+        paste_text,
+        inject_window
     ));
-    let outcome = inject_with_fallback(job, &paste_text)?;
+    let outcome = inject_with_fallback(job, &paste_text, effective_mode)?;
 
     Ok(JobCompletion { paste_text, injection: outcome })
 }
@@ -391,12 +402,56 @@ fn wrap_quotes(s: String, wrap: bool) -> String {
     }
 }
 
-/// Try the configured injection mode; on failure, fall back to copy (spec §9).
-/// Returns Injected on success, ReadyToPaste if copy fallback succeeded,
-/// or Err if BOTH injection and copy failed (genuine failure).
-fn inject_with_fallback(job: &TransferJob, paste_text: &str) -> Result<InjectionOutcome, AppError> {
-    match crate::injector::inject_text(paste_text, job.config.injection_mode.as_str()) {
-        Ok(()) => Ok(InjectionOutcome::Injected),
+/// Resolve the host-policy-effective injection mode for the current foreground
+/// window, and log when it overrides the global config mode. Returns the mode
+/// to actually use for injection. (P1 — see `host_policy`.)
+fn resolve_effective_mode(job: &TransferJob, inject_window: &Option<String>) -> InjectionMode {
+    let effective = crate::host_policy::resolve_injection_mode(
+        inject_window.as_deref(),
+        job.config.injection_mode,
+    );
+    if effective != job.config.injection_mode {
+        job.log(&format!(
+            "Host policy override: {:?} → {:?} (global {:?}). For this host, press Ctrl+V to paste.",
+            inject_window, effective, job.config.injection_mode
+        ));
+    }
+    effective
+}
+
+/// Try the resolved injection mode; on failure, fall back to copy (spec §9).
+/// Returns Injected on success, ReadyToPaste if copy fallback succeeded, or Err
+/// if BOTH injection and copy failed (genuine failure).
+///
+/// `mode` is the host-policy-resolved mode (may differ from the global config
+/// mode — see `host_policy`). P0: Direct mode returns `Ok` without any delivery
+/// acknowledgement, so when `fallback_to_copy` is on we ALSO write the path to
+/// the clipboard as insurance — Direct is best-effort and unverifiable.
+fn inject_with_fallback(
+    job: &TransferJob,
+    paste_text: &str,
+    mode: InjectionMode,
+) -> Result<InjectionOutcome, AppError> {
+    match crate::injector::inject_text(paste_text, mode.as_str()) {
+        Ok(()) => {
+            // P0: Direct (Enigo) returns Ok whenever events are enqueued, with no
+            // feedback that the target consumed them. In hosts that drop synthetic
+            // input the path would land nowhere. With fallback_to_copy on, also
+            // place the path on the clipboard so the user always has a Ctrl+V
+            // recovery. (Direct is best-effort, unverifiable — the silent-failure
+            // trap in docs/ISSUES_20260809.md §2.)
+            if mode == InjectionMode::Direct && job.config.fallback_to_copy {
+                match crate::injector::inject_text(paste_text, "copy") {
+                    Ok(()) => job.log(
+                        "Direct injection unverifiable (no delivery ack); path also copied to clipboard (fallback_to_copy).",
+                    ),
+                    Err(e) => job.log(&format!(
+                        "Direct insurance: clipboard copy failed: {}", e
+                    )),
+                }
+            }
+            Ok(InjectionOutcome::Injected)
+        }
         Err(e) => {
             // Auto-injection failed. Don't fail the job — the image was already
             // uploaded successfully. Copy the path to clipboard as fallback.

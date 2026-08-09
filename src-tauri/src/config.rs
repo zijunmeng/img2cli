@@ -83,7 +83,7 @@ pub struct AppConfig {
 fn default_output_format() -> String { "markdown".to_string() }
 fn default_compress_quality() -> u8 { 80 }
 fn default_max_dimension() -> Option<u32> { Some(1024) }
-fn default_wrap_single_quotes() -> bool { true }
+fn default_wrap_single_quotes() -> bool { false }
 fn default_launch_on_boot() -> bool { true }
 fn default_enable_notifications() -> bool { true }
 fn default_global_hotkey() -> String { "Alt+V".to_string() }

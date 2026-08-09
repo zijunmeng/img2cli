@@ -549,7 +549,7 @@ const config = ref({
   compress_quality: 80,
   max_dimension: 1024,
   workspace_aware: false,
-  wrap_single_quotes: true,
+  wrap_single_quotes: false,
   launch_on_boot: true,
   enable_notifications: true,
   global_hotkey: 'Alt+V',

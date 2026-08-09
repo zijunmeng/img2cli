@@ -7,6 +7,7 @@ mod cli_adapter;
 mod daemon;
 mod injector;
 mod job;
+mod host_policy;
 mod routing;
 mod ssh;
 mod ssh_config;
