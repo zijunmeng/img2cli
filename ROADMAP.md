@@ -76,3 +76,33 @@ This file tracks future architecture improvements, user experience features, and
   1. Replace orange-amber gradients (`bg-gradient-to-r from-orange-500 to-amber-500`) with flat Action Blue (`#2997ff`) highlights, borders, and active state changes.
   2. Implement frosted-glass panels (`backdrop-blur: 24px` over `rgba(255, 255, 255, 0.04)`) for the sidebar and main settings card panels.
   3. Clean up the typography system to enforce negative letter-spacing on display headings and align table layout styles.
+
+---
+
+## 7. Milestone 6: UX Simplification Batch (Short-Term, v0.3.12 candidate)
+
+> Recorded 2026-08-14 after real-world v0.3.11 testing on Orca. **Deferred by decision — do not implement until picked up deliberately.**
+
+### A. Main Window Free Resizing
+* **Defect**: The Settings window is locked at 800×600 and cannot be resized.
+* **Root cause**: `"resizable": false` on the `main` window in `src-tauri/tauri.conf.json`.
+* **Action**:
+  1. Set `resizable: true` with `minWidth`/`minHeight` constraints.
+  2. Make the `App.vue` layout responsive (it is currently designed for a fixed 800×600 canvas) — sidebar, settings cards, and the log view should reflow.
+
+### B. Honest Hotkey Naming
+* **Issue**: The setting is labelled "Paste Hotkey", but on hosts where the host policy forces Copy (Orca), it only uploads + copies to the clipboard — the actual paste is the user's manual `Ctrl+V`.
+* **Action**: Rename the UI label to "Upload Hotkey"; keep the dynamic hint text consistent.
+
+### C. Hotkey Blacklist Validation
+* **Issue**: `save_config` accepts any parseable shortcut — there is no blocklist. Registering `Ctrl+V` globally hijacks paste system-wide and self-sabotages the Copy flow: every manual paste after Copy spawns a failed job (`No image found in clipboard`, observed in the 2026-08-14 log).
+* **Action**:
+  1. On save, reject destructive/reserved combos with a clear message: `Ctrl+C/V/X/Z/S/A/F4`, `Alt+Tab`, `Win+*`-class reservations.
+  2. Keep the existing parse-failure rollback.
+
+### D. Injection Mode Consolidation (5 → 3)
+* **Issue**: Five modes (`Auto/Direct/Swap/PasteKeep/Copy`) are v0.3.8–v0.3.10 experiment sediment. Since v0.3.11 the per-host decision is owned by `host_policy` (baseline P1), which is the thing Swap/PasteKeep were manually working around; PasteKeep's premise (VSCode accepting synthetic Ctrl+V) is gone entirely.
+* **Action**:
+  1. Keep three modes: **Auto** (default — host policy decides the full table: plain terminal → Direct, Orca → Copy), **Direct** (force typing; never touches the clipboard), **Copy** (force clipboard + manual Ctrl+V).
+  2. Remove Swap/PasteKeep from the UI; migrate existing config values (`swap → auto`, `paste_keep → copy`) while serde keeps accepting the old strings.
+  3. Extend `host_policy.rs` from the Orca-only override to the full decision table, so Auto is genuinely automatic.

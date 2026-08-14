@@ -104,3 +104,4 @@ This file tracks current, observable defects, platform limitations, and security
 
 ## 6. UI & Design System Alignment Gaps
 * **Gradient Theme Mismatch**: The current GUI interface still uses orange-to-amber gradients (`bg-gradient-to-r from-orange-500 to-amber-500`) and custom styles that deviate from the pure Apple style defined in [DESIGN.md](DESIGN.md). Full visual style migration is scheduled as part of the roadmap.
+* **Fixed Window Size**: The Settings window is locked at 800×600 (`"resizable": false` in `src-tauri/tauri.conf.json`) and cannot be resized. Fix (config flag + responsive layout) is planned in [ROADMAP.md](ROADMAP.md) Milestone 6A; deferred by decision (2026-08-14).
