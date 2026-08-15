@@ -97,7 +97,7 @@ pub fn inject_paste_keep(text: &str) -> Result<(), String> {
 /// Copy the text to the clipboard and stop — no keystroke injection. The user
 /// pastes manually (Ctrl+V). For terminals (VSCode remote) that reject all
 /// synthetic input; a real user keypress is the only thing that gets through.
-fn copy_to_clipboard(text: &str) -> Result<(), String> {
+pub(crate) fn copy_to_clipboard(text: &str) -> Result<(), String> {
     let mut clipboard = Clipboard::new()
         .map_err(|e| format!("Failed to open clipboard: {}", e))?;
     clipboard

@@ -239,6 +239,29 @@ fn get_log_history(state: tauri::State<'_, daemon::DaemonState>) -> Result<Vec<S
     }
 }
 
+/// Copy the full log history to the clipboard (Milestone 6-F).
+#[tauri::command]
+fn copy_logs(state: tauri::State<'_, daemon::DaemonState>) -> Result<(), String> {
+    let logs = state
+        .log_history
+        .lock()
+        .map_err(|_| "Failed to acquire log history lock".to_string())?;
+    crate::injector::copy_to_clipboard(&logs.join("\n"))
+}
+
+/// Write the full log history to a file path chosen by the user via the
+/// frontend save dialog (Milestone 6-F). Returns the path written.
+#[tauri::command]
+fn write_logs(path: String, state: tauri::State<'_, daemon::DaemonState>) -> Result<String, String> {
+    let logs = state
+        .log_history
+        .lock()
+        .map_err(|_| "Failed to acquire log history lock".to_string())?;
+    let text = logs.join("\n");
+    std::fs::write(&path, text).map_err(|e| format!("Failed to write log file: {}", e))?;
+    Ok(path)
+}
+
 #[tauri::command]
 async fn test_connection(
     host: String,
@@ -412,6 +435,15 @@ fn restart_as_admin(app: &tauri::AppHandle) {
 
 fn main() {
     let app = tauri::Builder::default()
+        // Must be the FIRST plugin: a second launch should surface the
+        // existing window instead of spawning a duplicate tray + hotkey
+        // instance (Milestone 6-E).
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec![]),
@@ -562,6 +594,8 @@ fn main() {
             get_config,
             save_config,
             get_log_history,
+            copy_logs,
+            write_logs,
             test_connection,
             load_ssh_config,
             set_ssh_password,

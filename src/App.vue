@@ -390,9 +390,17 @@
               <h2 class="text-2xl font-bold tracking-tight text-[var(--color-text-primary)]">System Logs</h2>
               <p class="text-sm text-[var(--color-text-secondary)]">Real-time daemon events and screenshot processing logs.</p>
             </div>
-            <button @click="logs = []" class="bg-[var(--bg-button)] hover:bg-[var(--bg-button-hover)] text-[var(--color-text-primary)] font-semibold px-3 py-1.5 rounded-xl text-xs active:scale-[0.98] transition-all">
-              Clear Logs
-            </button>
+            <div class="flex items-center gap-2">
+              <button @click="copyAllLogs" class="bg-[var(--bg-button)] hover:bg-[var(--bg-button-hover)] text-[var(--color-text-primary)] font-semibold px-3 py-1.5 rounded-xl text-xs active:scale-[0.98] transition-all">
+                Copy All
+              </button>
+              <button @click="exportLogs" class="bg-[var(--bg-button)] hover:bg-[var(--bg-button-hover)] text-[var(--color-text-primary)] font-semibold px-3 py-1.5 rounded-xl text-xs active:scale-[0.98] transition-all">
+                Export…
+              </button>
+              <button @click="logs = []" class="bg-[var(--bg-button)] hover:bg-[var(--bg-button-hover)] text-[var(--color-text-primary)] font-semibold px-3 py-1.5 rounded-xl text-xs active:scale-[0.98] transition-all">
+                Clear Logs
+              </button>
+            </div>
           </div>
 
           <div class="flex-1 bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-2xl p-4 overflow-y-auto font-mono text-xs text-[var(--color-text-secondary)] space-y-1.5 shadow-inner" ref="logContainer">
@@ -525,7 +533,7 @@
 import { ref, onMounted, nextTick, computed, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { open as openDialog } from '@tauri-apps/plugin-dialog';
+import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
 
 // Active Tab
 const activeTab = ref('general');
@@ -557,7 +565,7 @@ const config = ref({
   upload_strategy: 'eager',
   injection_mode: 'direct',
   clean_keep_days: 1,
-  theme: 'apple-dark',
+  theme: 'dracula',
   ssh: {
     enabled: false,
     host: '',
@@ -600,18 +608,20 @@ const themes = {
     bgToggle: 'rgba(0,0,0,0.10)', colorToggleKnob: '#ffffff', bgButton: 'rgba(0,0,0,0.05)', bgButtonHover: 'rgba(0,0,0,0.10)'
   },
   'dracula': {
-    bgApp: '#282a36',
-    bgSidebar: 'rgba(33, 34, 44, 0.6)',
-    bgCard: 'rgba(68, 71, 90, 0.4)',
-    colorBorder: 'rgba(98, 114, 164, 0.3)',
+    // v0.3.12: retuned toward a deep-blue (Catppuccin-Mocha-family) background
+    // per the herdr reference — the old #282a36 + desaturated grays read gray.
+    bgApp: '#1e1e2e',
+    bgSidebar: 'rgba(24, 24, 37, 0.75)',
+    bgCard: 'rgba(49, 50, 68, 0.45)',
+    colorBorder: 'rgba(108, 112, 134, 0.35)',
     colorAccent: '#bd93f9',
     colorAccentHover: '#ff79c6',
     colorAccentDim: 'rgba(189, 147, 249, 0.1)',
     textPrimary: '#f8f8f2',
     textSecondary: '#6272a4',
-    bgInput: '#1e1f29',
-    colorInputBorder: '#44475a',
-    bgToggle: 'rgba(98,114,164,0.30)', colorToggleKnob: '#f8f8f2', bgButton: '#44475a', bgButtonHover: '#5a5f78'
+    bgInput: '#181825',
+    colorInputBorder: '#45475a',
+    bgToggle: 'rgba(98,114,164,0.30)', colorToggleKnob: '#f8f8f2', bgButton: '#45475a', bgButtonHover: '#585b78'
   },
   'nord': {
     bgApp: '#2e3440',
@@ -668,6 +678,31 @@ const themeLabel = (name) => name.split('-').map((w) => w[0].toUpperCase() + w.s
 // Logs Container & History
 const logs = ref([]);
 const logContainer = ref(null);
+
+// System Logs toolbar actions (copy all / export to file)
+async function copyAllLogs() {
+  try {
+    await invoke('copy_logs');
+    showToast('Logs copied to clipboard.');
+  } catch (err) {
+    showToast(`Failed to copy logs: ${err}`, true);
+  }
+}
+
+async function exportLogs() {
+  try {
+    const stamp = new Date().toISOString().slice(0, 10).replaceAll('-', '');
+    const path = await saveDialog({
+      defaultPath: `img2cli-logs-${stamp}.log`,
+      filters: [{ name: 'Log', extensions: ['log', 'txt'] }]
+    });
+    if (!path) return;
+    await invoke('write_logs', { path });
+    showToast(`Logs exported to: ${path}`);
+  } catch (err) {
+    showToast(`Failed to export logs: ${err}`, true);
+  }
+}
 
 // SSH Testing State
 const testingConnection = ref(false);
