@@ -4,6 +4,10 @@
        @mousedown="capMouseDown" @mousemove="capMouseMove" @mouseup="capMouseUp">
     <img v-if="capturedImageSrc" :src="capturedImageSrc" class="absolute inset-0 w-full h-full object-cover pointer-events-none" />
     <div v-if="!hasRect && config.capture_show_hints" class="absolute top-5 left-1/2 -translate-x-1/2 text-white text-sm bg-black/70 px-4 py-1.5 rounded-full pointer-events-none shadow-lg z-[10000]">{{ t('Drag to select · Click a window to snap · Enter to save · Esc to cancel') }}</div>
+    <!-- Pending last-region proposal (6-O): dashed, inert, Enter to reuse -->
+    <div v-if="pendingRect && !hasRect" :style="pendingStyle" class="absolute pointer-events-none z-[9999]">
+      <span class="absolute -top-6 left-0 bg-black/70 text-white text-[11px] px-1.5 py-0.5 rounded-md whitespace-nowrap">{{ t('Enter to reuse · drag to reselect') }}</span>
+    </div>
     <!-- Auto-detected window under the cursor (6-J): outline + size label -->
     <div v-if="hoverRect && !hasRect" :style="hoverStyle" class="absolute pointer-events-none z-[10000]">
       <span class="absolute -top-6 left-0 bg-[#2997ff] text-white text-[11px] px-1.5 py-0.5 rounded-md font-mono whitespace-nowrap shadow-lg">{{ Math.round(hoverRect.w) }} × {{ Math.round(hoverRect.h) }}</span>
@@ -300,69 +304,10 @@
             <p class="text-sm text-[var(--color-text-secondary)]">{{ t('Configure remote SSH servers and local workspace directory routing.') }}</p>
           </div>
 
-          <!-- Default SSH Config -->
+          <!-- Routing Targets (default host + dynamic rules as one card list, 6-N) -->
           <div class="bg-[var(--bg-card)] backdrop-blur-2xl border border-[var(--color-border)] rounded-2xl p-6 space-y-4 shadow-[0_8px_32px_rgba(0,0,0,0.37)]">
             <div class="flex items-center justify-between border-b border-[var(--color-input-border)] pb-3">
-              <label class="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" v-model="config.ssh.enabled" class="sr-only peer" />
-                <div class="w-11 h-6 bg-[var(--bg-toggle)] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-[var(--color-toggle-knob)] after:border-[var(--color-toggle-knob)] after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--color-accent)]"></div>
-              </label>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">{{ t('Host Name') }}</label>
-                <input type="text" v-model="config.ssh.match_pattern" :disabled="!config.ssh.enabled" :placeholder="t('e.g. My GPU Server')" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)] disabled:opacity-50" />
-              </div>
-              <div>
-                <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">{{ t('Host IP / Address') }}</label>
-                <input type="text" v-model="config.ssh.host" :disabled="!config.ssh.enabled" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)] disabled:opacity-50" />
-              </div>
-              <div>
-                <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">{{ t('Port') }}</label>
-                <input type="number" v-model.number="config.ssh.port" :disabled="!config.ssh.enabled" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)] disabled:opacity-50" />
-              </div>
-              <div>
-                <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">{{ t('Username') }}</label>
-                <input type="text" v-model="config.ssh.username" :disabled="!config.ssh.enabled" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)] disabled:opacity-50" />
-              </div>
-              <div class="md:col-span-2">
-                <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">{{ t('Remote Copy Destination Folder') }}</label>
-                <input type="text" v-model="config.ssh.remote_dir" :disabled="!config.ssh.enabled" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)] disabled:opacity-50" />
-              </div>
-              <div>
-                <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">{{ t('Password') }} <span class="text-[var(--color-text-secondary)]/80 normal-case font-normal">{{ t('(OS keyring)') }}</span></label>
-                <input type="password" v-model="defaultPassword" :disabled="!config.ssh.enabled" :placeholder="defaultHasPassword ? t('●●●●●● (saved) — type a new one to update') : t('blank: uses your SSH key (~/.ssh)')" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)] disabled:opacity-50" />
-                <div class="flex items-center gap-2 mt-1.5">
-                  <input type="checkbox" id="default-remember-pwd" v-model="config.ssh.remember_password" :disabled="!config.ssh.enabled" class="accent-[var(--color-accent)] rounded bg-[var(--bg-input)] border-[var(--color-input-border)]" />
-                  <label for="default-remember-pwd" class="text-xs font-medium text-[var(--color-text-secondary)] cursor-pointer select-none">{{ t('Remember Password (OS Keyring)') }}</label>
-                </div>
-                <div class="text-[11px] mt-1 flex items-center gap-2">
-                  <template v-if="defaultHasPassword">
-                    <span class="text-emerald-400">{{ t('✓ Password saved (keyring)') }}</span>
-                    <button type="button" @click="clearDefaultPassword" :disabled="!config.ssh.enabled" class="text-red-400/80 hover:text-red-400 underline disabled:opacity-50">{{ t('clear') }}</button>
-                  </template>
-                  <span v-else class="text-[var(--color-text-secondary)]">{{ t('No password → will use your SSH key (~/.ssh)') }}</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="flex justify-end pt-2">
-              <button 
-                @click="checkSSHConnection" 
-                :disabled="!config.ssh.enabled || testingConnection"
-                class="bg-[var(--bg-button)] hover:bg-[var(--bg-button-hover)] text-[var(--color-text-primary)] font-semibold px-4 py-2 rounded-xl text-xs active:scale-[0.98] transition-all disabled:opacity-50 flex items-center gap-2"
-              >
-                <span v-if="testingConnection" class="w-3 h-3 border-2 border-[var(--color-text-secondary)] border-t-transparent rounded-full animate-spin"></span>
-                {{ testingConnection ? t('Testing...') : t('Test Connection') }}
-              </button>
-            </div>
-          </div>
-
-          <!-- Dynamic Targets List -->
-          <div class="bg-[var(--bg-card)] backdrop-blur-2xl border border-[var(--color-border)] rounded-2xl p-6 space-y-4 shadow-[0_8px_32px_rgba(0,0,0,0.37)]">
-            <div class="flex items-center justify-between border-b border-[var(--color-input-border)] pb-3">
-              <h3 class="text-sm font-semibold uppercase text-[var(--color-text-secondary)] tracking-wider">{{ t('Dynamic Router Targets') }}</h3>
+              <h3 class="text-sm font-semibold uppercase text-[var(--color-text-secondary)] tracking-wider">{{ t('Routing Targets') }}</h3>
               <div class="flex items-center gap-2">
                 <button
                   @click="openSshLoader"
@@ -386,8 +331,40 @@
               </div>
             </div>
 
-            <!-- Target cards (Orca-style, Milestone 6-H) -->
+            <!-- Target cards (Orca-style, Milestone 6-H; default host pinned first, 6-N) -->
             <div class="space-y-3">
+              <!-- Default host (config.ssh) — the fallback route, pinned first -->
+              <div v-if="config.ssh" class="rounded-xl border border-emerald-500/30 bg-[var(--bg-input)]/40 px-4 py-3 flex items-center gap-3">
+                <span class="w-2.5 h-2.5 rounded-full shrink-0"
+                      :class="{
+                        'bg-emerald-400': defaultTest === 'ok' && config.ssh.enabled,
+                        'bg-red-400': defaultTest === 'fail',
+                        'bg-amber-400 animate-pulse': defaultTest === 'testing',
+                        'bg-[var(--color-text-secondary)]/40': !config.ssh.enabled || !defaultTest,
+                      }"
+                      :title="defaultTestTitle"></span>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-sm font-semibold text-[var(--color-text-primary)] truncate">{{ config.ssh.match_pattern || config.ssh.host || 'Default' }}</span>
+                    <span class="px-1.5 py-0.5 rounded-md text-[10px] font-semibold uppercase bg-[var(--color-accent)]/10 text-[var(--color-accent)] border border-[var(--color-accent)]/25">SSH</span>
+                    <span class="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">{{ t('Default') }}</span>
+                    <span v-if="defaultHasPassword" class="text-[11px]" :title="t('✓ Password saved (keyring)')">🔑</span>
+                  </div>
+                  <div class="text-xs text-[var(--color-text-secondary)] font-mono truncate mt-0.5">
+                    {{ config.ssh.username }}@{{ config.ssh.host }}:{{ config.ssh.port || 22 }} → {{ config.ssh.remote_dir }}
+                  </div>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input type="checkbox" v-model="config.ssh.enabled" class="sr-only peer" />
+                  <div class="w-9 h-5 bg-[var(--bg-toggle)] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-[var(--color-toggle-knob)] after:border-[var(--color-toggle-knob)] after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--color-accent)]"></div>
+                </label>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <button @click="testDefaultCard" :disabled="defaultTest === 'testing'"
+                          class="px-2 py-1 rounded-lg text-[11px] font-semibold bg-[var(--bg-button)] hover:bg-[var(--bg-button-hover)] text-[var(--color-text-primary)] disabled:opacity-50 transition-colors">{{ defaultTest === 'testing' ? t('Testing...') : t('Test') }}</button>
+                  <button @click="openDefaultHostModal"
+                          class="px-2 py-1 rounded-lg text-[11px] font-semibold bg-[var(--color-text-secondary)]/10 text-[var(--color-text-secondary)] border border-[var(--color-text-secondary)]/25 hover:bg-[var(--color-text-secondary)]/20 transition-colors">{{ t('Edit') }}</button>
+                </div>
+              </div>
               <div v-for="(target, idx) in (config.targets || [])" :key="target.match_pattern || idx"
                    class="rounded-xl border border-[var(--color-border)] bg-[var(--bg-input)]/40 px-4 py-3 flex items-center gap-3 hover:border-[var(--color-accent)]/40 transition-colors">
                 <span class="w-2.5 h-2.5 rounded-full shrink-0"
@@ -470,7 +447,7 @@
     <!-- Add/Edit Target Modal -->
     <div v-if="showAddTargetModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
       <div class="bg-[var(--bg-card)] backdrop-blur-2xl border border-[var(--color-border)] rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
-        <h3 class="text-lg font-bold text-[var(--color-text-primary)]">{{ editingTargetIndex !== null ? t('Edit Router Target') : t('Add Router Target') }}</h3>
+        <h3 class="text-lg font-bold text-[var(--color-text-primary)]">{{ editingDefaultHost ? t('Edit Default Host') : (editingTargetIndex !== null ? t('Edit Router Target') : t('Add Router Target')) }}</h3>
         
         <div class="space-y-3">
           <div class="grid grid-cols-2 gap-3">
@@ -781,9 +758,6 @@ async function exportLogs() {
   }
 }
 
-// SSH Testing State
-const testingConnection = ref(false);
-
 // Add/Edit Target Modal State
 const showAddTargetModal = ref(false);
 const editingTargetIndex = ref(null);
@@ -799,9 +773,12 @@ const tempTarget = ref({
   password: ''
 });
 
-// Password for the default SSH host (stored in OS keyring, NOT in config).
-const defaultPassword = ref('');
+// Password state for the default SSH host lives in the OS keyring; the card
+// shows whether one is stored (defaultHasPassword), editing goes through the
+// target modal (editingDefaultHost) like every other host.
 const defaultHasPassword = ref(false);
+const defaultTest = ref(null); // null | 'testing' | 'ok' | 'fail'
+const editingDefaultHost = ref(false);
 const tempTargetHasPassword = ref(false);
 const recordingHotkey = ref(false);
 const lastSavedGlobalHotkey = ref('');
@@ -948,9 +925,6 @@ const setAsDefault = async (index) => {
     remember_password: tgt.remember_password !== undefined ? tgt.remember_password : true
   };
 
-  // Clear current password input to avoid inserting password text across hosts
-  defaultPassword.value = '';
-
   // Check if keyring already contains password for this host to update UI status indicator
   try {
     defaultHasPassword.value = await invoke('has_ssh_password', {
@@ -1004,49 +978,12 @@ const loadConfig = async () => {
 // Save Configurations
 const saveSettings = async () => {
   try {
-    // If remember_password is true, save password to system keyring.
-    // If remember_password is false, delete password from system keyring.
-    if (config.value.ssh) {
-      const user = config.value.ssh.username || '';
-      const host = config.value.ssh.host || '';
-      const port = config.value.ssh.port || null;
-      
-      if (config.value.ssh.remember_password) {
-        if (defaultPassword.value) {
-          await invoke('set_ssh_password', { user, host, port, password: defaultPassword.value });
-          defaultHasPassword.value = true;
-          defaultPassword.value = '';
-        }
-      } else {
-        await invoke('clear_ssh_password', { user, host, port });
-        defaultHasPassword.value = false;
-        defaultPassword.value = '';
-      }
-    }
     await invoke('save_config', { config: config.value });
     lastSavedGlobalHotkey.value = config.value.global_hotkey;
     lastSavedScreenshotHotkey.value = config.value.screenshot_hotkey;
     showToast(t('Settings saved successfully!'));
   } catch (err) {
     showToast(`${t('Failed to save settings:')} ${err}`, true);
-  }
-};
-
-// Check SSH connection
-const checkSSHConnection = async () => {
-  testingConnection.value = true;
-  try {
-    const res = await invoke('test_connection', {
-      host: config.value.ssh.host,
-      port: config.value.ssh.port || null,
-      username: config.value.ssh.username || null,
-      password: defaultPassword.value || null
-    });
-    showToast(res);
-  } catch (err) {
-    showToast(`${t('Connection failed:')} ${err}`, true);
-  } finally {
-    testingConnection.value = false;
   }
 };
 
@@ -1122,6 +1059,19 @@ const capturedImageSrc = ref('');
 const rect = ref({ x: 0, y: 0, w: 0, h: 0 });               // normalized selection, CSS px
 const hasRect = computed(() => rect.value.w >= 4 && rect.value.h >= 4);
 const capAction = ref(null);                                  // 'draw' | 'move' | 'resize' | null
+// 6-O: the preloaded last region is a PROPOSAL, not a confirmed selection —
+// dashed outline, pointer-events none; Enter captures it directly, any
+// mousedown discards it and starts a fresh draw. Unconfirmed rects must
+// never lock the overlay into move-edit mode.
+const pendingRect = ref(null);
+const pendingStyle = computed(() => {
+  const r = pendingRect.value;
+  if (!r) return {};
+  return {
+    left: r.x + 'px', top: r.y + 'px', width: r.w + 'px', height: r.h + 'px',
+    border: '2px dashed #2997ff',
+  };
+});
 const capHandle = ref(null);
 const capOrigin = ref({ mx: 0, my: 0, rect: null });
 
@@ -1176,6 +1126,8 @@ const selBorderStyle = computed(() => ({
 }));
 
 const capMouseDown = (e) => {
+  // Any mousedown discards the pending proposal — the user wants to draw.
+  if (pendingRect.value) pendingRect.value = null;
   // Click-to-snap (6-J): if a detected window is under the cursor, adopt its
   // rect as the selection and enter the adjustable editor instead of drawing.
   if (hoverRect.value) {
@@ -1239,17 +1191,6 @@ const confirmRect = async () => {
 const cancelRect = async () => { try { await invoke('cancel_capture'); } catch (_) {} };
 
 // Clear stored SSH passwords from the OS keyring.
-const clearDefaultPassword = async () => {
-  if (!config.value.ssh) return;
-  try {
-    await invoke('clear_ssh_password', { user: config.value.ssh.username || '', host: config.value.ssh.host || '', port: config.value.ssh.port || null });
-    defaultHasPassword.value = false;
-    defaultPassword.value = '';
-    showToast(t('Password cleared.'));
-  } catch (err) {
-    showToast(`${t('Failed to clear:')} ${err}`, true);
-  }
-};
 const clearTargetPassword = async () => {
   try {
     await invoke('clear_ssh_password', { user: tempTarget.value.username || '', host: tempTarget.value.host || '', port: tempTarget.value.port || null });
@@ -1298,6 +1239,44 @@ const testTargetCard = async (tg) => {
 const targetTestTitle = (tg) => ({
   ok: t('Connected'), fail: t('Connection failed:'), testing: t('Testing...'),
 }[targetTest.value[tg.match_pattern]] || '');
+
+// Default-host card actions (6-N): test + edit-via-target-modal.
+const defaultTestTitle = computed(() => ({
+  ok: t('Connected'), fail: t('Connection failed:'), testing: t('Testing...'),
+}[defaultTest.value] || ''));
+const testDefaultCard = async () => {
+  const d = config.value.ssh;
+  if (!d || !d.host || defaultTest.value === 'testing') return;
+  defaultTest.value = 'testing';
+  try {
+    await invoke('test_connection', { host: d.host, port: d.port || null, username: d.username || null, password: null });
+    defaultTest.value = 'ok';
+  } catch (_) {
+    defaultTest.value = 'fail';
+  }
+};
+const openDefaultHostModal = async () => {
+  const d = config.value.ssh;
+  if (!d) return;
+  editingDefaultHost.value = true;
+  editingTargetIndex.value = null;
+  tempTarget.value = {
+    enabled: true,
+    type: 'ssh',
+    match_pattern: d.match_pattern || d.host || '',
+    host: d.host || '',
+    port: d.port || 22,
+    username: d.username || '',
+    remote_dir: d.remote_dir || '/tmp/img2cli',
+    local_dir: null,
+    remember_password: d.remember_password !== false,
+    password: '',
+  };
+  tempTargetHasPassword.value = await invoke('has_ssh_password', {
+    user: d.username || '', host: d.host || '', port: d.port || null,
+  }).catch(() => false);
+  showAddTargetModal.value = true;
+};
 // A target is the default when it matches the enabled default SSH host.
 const isDefaultTarget = (idx) => {
   const tg = config.value.targets[idx];
@@ -1314,7 +1293,23 @@ const saveTarget = async () => {
 
   // Password is stored in the OS keyring, never in config.toml.
   const { password, ...targetData } = { ...tempTarget.value };
-  if (editingTargetIndex.value !== null) {
+  if (editingDefaultHost.value) {
+    // 6-N: the default host (config.ssh) edits through the same modal. It is
+    // the fallback SSH route, so it must stay an SSH target.
+    if (targetData.type !== 'ssh') {
+      showToast(t('Default host must be SSH type'), true);
+      return;
+    }
+    config.value.ssh = {
+      ...config.value.ssh,
+      host: targetData.host || '',
+      port: targetData.port || 22,
+      username: targetData.username || '',
+      remote_dir: targetData.remote_dir || '/tmp/img2cli',
+      match_pattern: targetData.match_pattern || '',
+      remember_password: targetData.remember_password !== undefined ? targetData.remember_password : true,
+    };
+  } else if (editingTargetIndex.value !== null) {
     config.value.targets[editingTargetIndex.value] = targetData;
   } else {
     config.value.targets.push(targetData);
@@ -1361,6 +1356,7 @@ const saveTarget = async () => {
 const closeTargetModal = () => {
   showAddTargetModal.value = false;
   editingTargetIndex.value = null;
+  editingDefaultHost.value = false;
   tempTarget.value = {
     enabled: true,
     type: 'ssh',
@@ -1410,6 +1406,11 @@ onMounted(() => {
     captureMode.value = true;
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') invoke('cancel_capture');
+      else if (e.key === 'Enter' && pendingRect.value && !hasRect.value) {
+        rect.value = pendingRect.value;
+        pendingRect.value = null;
+        confirmRect();
+      }
       else if (e.key === 'Enter' && hasRect.value) confirmRect();
     });
     
@@ -1431,7 +1432,8 @@ onMounted(() => {
             if (r.w >= 4 && r.h >= 4 && r.x < window.innerWidth && r.y < window.innerHeight) {
               const px = Math.max(0, r.x);
               const py = Math.max(0, r.y);
-              rect.value = {
+              // 6-O: preload as a pending proposal, not an editable selection.
+              pendingRect.value = {
                 x: px, y: py,
                 w: Math.max(4, Math.min(r.w, window.innerWidth - px)),
                 h: Math.max(4, Math.min(r.h, window.innerHeight - py)),

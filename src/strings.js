@@ -144,6 +144,11 @@ export const ZH = {
   Local: '本地',
   Default: '默认',
   Connected: '已连通',
+  // ── v0.3.14 ──
+  'Enter to reuse · drag to reselect': 'Enter 重用此区域 · 拖拽重新选择',
+  'Routing Targets': '路由目标',
+  'Edit Default Host': '编辑默认主机',
+  'Default host must be SSH type': '默认主机必须是 SSH 类型',
 };
 
 // Chinese display names for the theme selector.
