@@ -63,6 +63,8 @@ pub struct AppConfig {
     pub clean_keep_days: u32,
     #[serde(default = "default_theme")]
     pub theme: String,
+    #[serde(default = "default_language")]
+    pub language: String,
 
     // When Direct injection can't be verified as delivered, also copy the
     // path to the clipboard as insurance (P0, docs/ISSUES_20260809.md §2).
@@ -91,6 +93,7 @@ fn default_screenshot_hotkey() -> String { "Alt+Shift+S".to_string() }
 fn default_upload_strategy() -> String { "eager".to_string() }
 fn default_clean_keep_days() -> u32 { 1 }
 fn default_theme() -> String { "dracula".to_string() }
+fn default_language() -> String { "zh-CN".to_string() }
 fn default_fallback_to_copy() -> bool { true }
 
 /// How the generated paste-text is delivered to the AI CLI.
@@ -148,6 +151,7 @@ impl Default for AppConfig {
             injection_mode: default_injection_mode(),
             clean_keep_days: default_clean_keep_days(),
             theme: default_theme(),
+            language: default_language(),
             fallback_to_copy: default_fallback_to_copy(),
             ssh: Some(SshConfig {
                 enabled: false,

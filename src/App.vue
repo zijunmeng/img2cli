@@ -3,7 +3,7 @@
   <div v-if="captureMode" class="fixed inset-0 z-[9999] cursor-crosshair select-none"
        @mousedown="capMouseDown" @mousemove="capMouseMove" @mouseup="capMouseUp">
     <img v-if="capturedImageSrc" :src="capturedImageSrc" class="absolute inset-0 w-full h-full object-cover pointer-events-none" />
-    <div v-if="!hasRect" class="absolute top-5 left-1/2 -translate-x-1/2 text-white text-sm bg-black/70 px-4 py-1.5 rounded-full pointer-events-none shadow-lg z-[10000]">Drag to select · Enter to save · Esc to cancel</div>
+    <div v-if="!hasRect" class="absolute top-5 left-1/2 -translate-x-1/2 text-white text-sm bg-black/70 px-4 py-1.5 rounded-full pointer-events-none shadow-lg z-[10000]">{{ t('Drag to select · Enter to save · Esc to cancel') }}</div>
     <div v-if="hasRect" :style="rectStyle" @mousedown.stop="startMove"
          class="absolute border border-[#2997ff] box-border cursor-move z-[10000]"
          style="box-shadow: 0 0 0 9999px rgba(0,0,0,0.45)">
@@ -13,7 +13,7 @@
       <div :style="toolbarStyle" @mousedown.stop
            class="absolute flex items-center gap-1 bg-[#1a1a1a]/95 rounded-md px-1.5 py-1 text-white text-xs shadow-lg">
         <span class="px-1 tabular-nums text-white/80">{{ Math.round(rect.w) }} × {{ Math.round(rect.h) }}</span>
-        <button @click.stop="confirmRect" class="px-2 py-0.5 rounded bg-[#2997ff] hover:brightness-110 font-medium">✓ Save</button>
+        <button @click.stop="confirmRect" class="px-2 py-0.5 rounded bg-[#2997ff] hover:brightness-110 font-medium">{{ t('✓ Save') }}</button>
         <button @click.stop="cancelRect" class="px-1.5 py-0.5 rounded hover:bg-white/15">✕</button>
       </div>
     </div>
@@ -52,7 +52,7 @@
           <img src="./assets/logo.png" class="w-8 h-8 rounded-lg shadow-lg shadow-[var(--color-accent)]/10 object-contain" alt="img2cli Logo" />
           <div>
             <h1 class="text-lg font-bold text-[var(--color-text-primary)] tracking-tight">img2cli</h1>
-            <p class="text-xs text-[var(--color-text-secondary)]">Settings v0.3.11</p>
+            <p class="text-xs text-[var(--color-text-secondary)]">{{ t('Settings') }} v{{ APP_VERSION }}</p>
           </div>
         </div>
 
@@ -64,7 +64,7 @@
             <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
             </svg>
-            General Settings
+            {{ t('General Settings') }}
           </button>
 
           <button 
@@ -74,7 +74,7 @@
             <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
             </svg>
-            Hosts & Targets
+            {{ t('Hosts & Targets') }}
           </button>
 
           <button 
@@ -84,7 +84,7 @@
             <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
-            System Logs
+            {{ t('System Logs') }}
           </button>
         </nav>
       </div>
@@ -98,80 +98,80 @@
         <div v-if="activeTab === 'general'" class="space-y-6">
           <div class="flex justify-between items-center">
             <div>
-              <h2 class="text-2xl font-bold tracking-tight text-[var(--color-text-primary)]">General Settings</h2>
-              <p class="text-sm text-[var(--color-text-secondary)]">Configure global screenshot format, hotkeys, and injection preferences.</p>
+              <h2 class="text-2xl font-bold tracking-tight text-[var(--color-text-primary)]">{{ t('General Settings') }}</h2>
+              <p class="text-sm text-[var(--color-text-secondary)]">{{ t('Configure global screenshot format, hotkeys, and injection preferences.') }}</p>
             </div>
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <!-- Left Card -->
             <div class="bg-[var(--bg-card)] backdrop-blur-2xl border border-[var(--color-border)] rounded-2xl p-6 space-y-4 shadow-[0_8px_32px_rgba(0,0,0,0.37)]">
-              <h3 class="text-sm font-semibold uppercase text-[var(--color-text-secondary)] tracking-wider">Image Config</h3>
+              <h3 class="text-sm font-semibold uppercase text-[var(--color-text-secondary)] tracking-wider">{{ t('Image Config') }}</h3>
               
               <div>
-                <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">Output Format</label>
+                <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">{{ t('Output Format') }}</label>
                 <select v-model="config.output_format" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)]">
-                  <option value="markdown">Markdown (![image](path))</option>
+                  <option value="markdown">{{ t('Markdown (![image](path))') }}</option>
                   <option value="html">HTML (&lt;img src="path" /&gt;)</option>
-                  <option value="raw">Raw Path</option>
-                  <option value="base64">Inline Base64 Data URI</option>
+                  <option value="raw">{{ t('Raw Path') }}</option>
+                  <option value="base64">{{ t('Inline Base64 Data URI') }}</option>
                 </select>
               </div>
 
               <div>
                 <div class="flex justify-between text-xs font-semibold text-[var(--color-text-secondary)] mb-1">
-                  <span>Compression Quality</span>
+                  <span>{{ t('Compression Quality') }}</span>
                   <span class="text-[var(--color-accent)]">{{ config.compress_quality }}%</span>
                 </div>
                 <input type="range" min="10" max="100" v-model.number="config.compress_quality" class="w-full accent-[var(--color-accent)] bg-[var(--bg-input)]" />
               </div>
 
               <div>
-                <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">Max Dimension (Pixels)</label>
-                <input type="number" v-model.number="config.max_dimension" placeholder="No Limit" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)]" />
+                <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">{{ t('Max Dimension (Pixels)') }}</label>
+                <input type="number" v-model.number="config.max_dimension" :placeholder="t('No Limit')" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)]" />
               </div>
             </div>
 
             <!-- Right Card -->
             <div class="bg-[var(--bg-card)] backdrop-blur-2xl border border-[var(--color-border)] rounded-2xl p-6 space-y-4 shadow-[0_8px_32px_rgba(0,0,0,0.37)]">
-              <h3 class="text-sm font-semibold uppercase text-[var(--color-text-secondary)] tracking-wider">System Integration</h3>
+              <h3 class="text-sm font-semibold uppercase text-[var(--color-text-secondary)] tracking-wider">{{ t('System Integration') }}</h3>
 
               <div>
                 <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">
-                  Paste Hotkey 
-                  <span v-if="recordingHotkey" class="text-[var(--color-accent)] font-bold ml-1 animate-pulse">(Recording...)</span>
-                  <span v-else class="text-[var(--color-text-secondary)]/80 normal-case font-normal ml-1">(click & press keys)</span>
+                  {{ t('Upload Hotkey') }}
+                  <span v-if="recordingHotkey" class="text-[var(--color-accent)] font-bold ml-1 animate-pulse">{{ t('(Recording...)') }}</span>
+                  <span v-else class="text-[var(--color-text-secondary)]/80 normal-case font-normal ml-1">{{ t('(click & press keys)') }}</span>
                 </label>
                 <div class="flex gap-2">
                   <input type="text" readonly :value="config.global_hotkey" @focus="recordingHotkey = true" @blur="recordingHotkey = false" @keydown="recordHotkeyKeydown" :class="['flex-1 bg-[var(--bg-input)] border rounded-xl px-3 py-2 text-sm focus:outline-none text-[var(--color-text-primary)] font-mono cursor-pointer transition-all', recordingHotkey ? 'border-[var(--color-accent)] shadow-[0_0_0_2px_rgba(41,151,255,0.2)]' : 'border-[var(--color-input-border)] focus:border-[var(--color-accent)]']" />
-                  <button type="button" @click="config.global_hotkey = 'Alt+V'" class="px-3 py-2 text-xs font-medium bg-[var(--bg-button)] hover:bg-[var(--bg-button-hover)] text-[var(--color-text-secondary)] rounded-xl transition-colors border border-[var(--color-input-border)]">Reset</button>
+                  <button type="button" @click="config.global_hotkey = 'Alt+V'" class="px-3 py-2 text-xs font-medium bg-[var(--bg-button)] hover:bg-[var(--bg-button-hover)] text-[var(--color-text-secondary)] rounded-xl transition-colors border border-[var(--color-input-border)]">{{ t('Reset') }}</button>
                 </div>
               </div>
               <div>
                 <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">
-                  Screenshot Hotkey 
-                  <span v-if="recordingShot" class="text-[var(--color-accent)] font-bold ml-1 animate-pulse">(Recording...)</span>
-                  <span v-else class="text-[var(--color-text-secondary)]/80 normal-case font-normal ml-1">(region capture)</span>
+                  {{ t('Screenshot Hotkey') }}
+                  <span v-if="recordingShot" class="text-[var(--color-accent)] font-bold ml-1 animate-pulse">{{ t('(Recording...)') }}</span>
+                  <span v-else class="text-[var(--color-text-secondary)]/80 normal-case font-normal ml-1">{{ t('(region capture)') }}</span>
                 </label>
                 <div class="flex gap-2">
                   <input type="text" readonly :value="config.screenshot_hotkey" @focus="recordingShot = true" @blur="recordingShot = false" @keydown="recordShotKeydown" :class="['flex-1 bg-[var(--bg-input)] border rounded-xl px-3 py-2 text-sm focus:outline-none text-[var(--color-text-primary)] font-mono cursor-pointer transition-all', recordingShot ? 'border-[var(--color-accent)] shadow-[0_0_0_2px_rgba(41,151,255,0.2)]' : 'border-[var(--color-input-border)] focus:border-[var(--color-accent)]']" />
-                  <button type="button" @click="config.screenshot_hotkey = 'Alt+Shift+S'" class="px-3 py-2 text-xs font-medium bg-[var(--bg-button)] hover:bg-[var(--bg-button-hover)] text-[var(--color-text-secondary)] rounded-xl transition-colors border border-[var(--color-input-border)]">Reset</button>
+                  <button type="button" @click="config.screenshot_hotkey = 'Alt+Shift+S'" class="px-3 py-2 text-xs font-medium bg-[var(--bg-button)] hover:bg-[var(--bg-button-hover)] text-[var(--color-text-secondary)] rounded-xl transition-colors border border-[var(--color-input-border)]">{{ t('Reset') }}</button>
                 </div>
               </div>
 
               <div>
-                <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">Injection Mode</label>
+                <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">{{ t('Injection Mode') }}</label>
                 <select v-model="config.injection_mode" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)]">
-                  <option value="auto">Auto — per-app strategy (recommended)</option>
-                  <option value="direct">Direct — type the path (no clipboard)</option>
-                  <option value="copy">Copy Only — manual Ctrl+V</option>
+                  <option value="auto">{{ t('Auto — per-app strategy (recommended)') }}</option>
+                  <option value="direct">{{ t('Direct — type the path (no clipboard)') }}</option>
+                  <option value="copy">{{ t('Copy Only — manual Ctrl+V') }}</option>
                 </select>
               </div>
 
               <div class="flex items-center justify-between py-1">
                 <div>
-                  <span class="block text-sm font-medium text-[var(--color-text-primary)]">Wrap in Single Quotes</span>
-                  <span class="block text-xs text-[var(--color-text-secondary)]">Wrap generated link in 'quotes'</span>
+                  <span class="block text-sm font-medium text-[var(--color-text-primary)]">{{ t('Wrap in Single Quotes') }}</span>
+                  <span class="block text-xs text-[var(--color-text-secondary)]">{{ t("Wrap generated link in 'quotes'") }}</span>
                 </div>
                 <label class="relative inline-flex items-center cursor-pointer">
                   <input type="checkbox" v-model="config.wrap_single_quotes" class="sr-only peer" />
@@ -181,8 +181,8 @@
 
               <div class="flex items-center justify-between py-1">
                 <div>
-                  <span class="block text-sm font-medium text-[var(--color-text-primary)]">Launch on Boot</span>
-                  <span class="block text-xs text-[var(--color-text-secondary)]">Start img2cli automatically</span>
+                  <span class="block text-sm font-medium text-[var(--color-text-primary)]">{{ t('Launch on Boot') }}</span>
+                  <span class="block text-xs text-[var(--color-text-secondary)]">{{ t('Start img2cli automatically') }}</span>
                 </div>
                 <label class="relative inline-flex items-center cursor-pointer">
                   <input type="checkbox" v-model="config.launch_on_boot" class="sr-only peer" />
@@ -192,8 +192,8 @@
 
               <div class="flex items-center justify-between py-1">
                 <div>
-                  <span class="block text-sm font-medium text-[var(--color-text-primary)]">Enable Desktop Notifications</span>
-                  <span class="block text-xs text-[var(--color-text-secondary)]">Show tips on screenshot success</span>
+                  <span class="block text-sm font-medium text-[var(--color-text-primary)]">{{ t('Enable Desktop Notifications') }}</span>
+                  <span class="block text-xs text-[var(--color-text-secondary)]">{{ t('Show tips on screenshot success') }}</span>
                 </div>
                 <label class="relative inline-flex items-center cursor-pointer">
                   <input type="checkbox" v-model="config.enable_notifications" class="sr-only peer" />
@@ -204,25 +204,32 @@
           </div>
           <!-- Interface Theme Selector -->
           <div class="bg-[var(--bg-card)] border border-[var(--color-border)] rounded-2xl p-6 space-y-4 shadow-[0_8px_32px_rgba(0,0,0,0.37)]">
-            <h3 class="text-sm font-semibold uppercase text-[var(--color-text-secondary)] tracking-wider">Interface Theme</h3>
+            <h3 class="text-sm font-semibold uppercase text-[var(--color-text-secondary)] tracking-wider">{{ t('Interface Theme') }}</h3>
             <div class="flex items-center gap-3">
               <span class="w-5 h-5 rounded-full border border-[var(--color-border)] shrink-0 shadow-inner" :style="{ backgroundColor: currentTheme.colorAccent }" :title="'Accent: ' + currentTheme.colorAccent"></span>
               <select v-model="config.theme" class="flex-1 bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)]">
                 <option v-for="(tOpts, name) in themes" :key="name" :value="name">{{ themeLabel(name) }}</option>
               </select>
             </div>
+            <div class="flex items-center justify-between py-1">
+              <span class="block text-sm font-medium text-[var(--color-text-primary)]">{{ t('Display Language') }}</span>
+              <select v-model="config.language" class="w-44 bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)]">
+                <option value="zh-CN">简体中文</option>
+                <option value="en">English</option>
+              </select>
+            </div>
           </div>
 
           <!-- Save Directory Config -->
           <div class="bg-[var(--bg-card)] border border-[var(--color-border)] rounded-2xl p-6 space-y-4 shadow-[0_8px_32px_rgba(0,0,0,0.37)]">
-            <h3 class="text-sm font-semibold uppercase text-[var(--color-text-secondary)] tracking-wider">Advanced Paths</h3>
+            <h3 class="text-sm font-semibold uppercase text-[var(--color-text-secondary)] tracking-wider">{{ t('Advanced Paths') }}</h3>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">Local Temporary Directory</label>
-                <input type="text" v-model="config.save_dir" placeholder="Default (Temp Dir/img2cli)" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)]" />
+                <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">{{ t('Local Temporary Directory') }}</label>
+                <input type="text" v-model="config.save_dir" :placeholder="t('Default (Temp Dir/img2cli)')" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)]" />
               </div>
               <div>
-                <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">Clean Expired Image Files (Days)</label>
+                <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">{{ t('Clean Expired Image Files (Days)') }}</label>
                 <input type="number" v-model.number="config.clean_keep_days" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)]" />
               </div>
             </div>
@@ -230,7 +237,7 @@
 
           <div class="flex justify-end pt-2">
             <button @click="saveSettings" class="flex items-center gap-2 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white px-6 py-2.5 rounded-full font-semibold shadow-sm shadow-[var(--color-accent)]/15 active:scale-[0.98] transition-all duration-150 text-sm">
-              Save Settings
+              {{ t('Save Settings') }}
             </button>
           </div>
         </div>
@@ -238,8 +245,8 @@
         <!-- Hosts & Targets Tab -->
         <div v-if="activeTab === 'hosts'" class="space-y-6">
           <div>
-            <h2 class="text-2xl font-bold tracking-tight text-[var(--color-text-primary)]">Hosts & Targets</h2>
-            <p class="text-sm text-[var(--color-text-secondary)]">Configure remote SSH servers and local workspace directory routing.</p>
+            <h2 class="text-2xl font-bold tracking-tight text-[var(--color-text-primary)]">{{ t('Hosts & Targets') }}</h2>
+            <p class="text-sm text-[var(--color-text-secondary)]">{{ t('Configure remote SSH servers and local workspace directory routing.') }}</p>
           </div>
 
           <!-- Default SSH Config -->
@@ -253,38 +260,38 @@
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">Host Name</label>
-                <input type="text" v-model="config.ssh.match_pattern" :disabled="!config.ssh.enabled" placeholder="e.g. My GPU Server" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)] disabled:opacity-50" />
+                <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">{{ t('Host Name') }}</label>
+                <input type="text" v-model="config.ssh.match_pattern" :disabled="!config.ssh.enabled" :placeholder="t('e.g. My GPU Server')" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)] disabled:opacity-50" />
               </div>
               <div>
-                <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">Host IP / Address</label>
+                <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">{{ t('Host IP / Address') }}</label>
                 <input type="text" v-model="config.ssh.host" :disabled="!config.ssh.enabled" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)] disabled:opacity-50" />
               </div>
               <div>
-                <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">Port</label>
+                <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">{{ t('Port') }}</label>
                 <input type="number" v-model.number="config.ssh.port" :disabled="!config.ssh.enabled" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)] disabled:opacity-50" />
               </div>
               <div>
-                <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">Username</label>
+                <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">{{ t('Username') }}</label>
                 <input type="text" v-model="config.ssh.username" :disabled="!config.ssh.enabled" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)] disabled:opacity-50" />
               </div>
               <div class="md:col-span-2">
-                <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">Remote Copy Destination Folder</label>
+                <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">{{ t('Remote Copy Destination Folder') }}</label>
                 <input type="text" v-model="config.ssh.remote_dir" :disabled="!config.ssh.enabled" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)] disabled:opacity-50" />
               </div>
               <div>
-                <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">Password <span class="text-[var(--color-text-secondary)]/80 normal-case font-normal">(OS keyring)</span></label>
-                <input type="password" v-model="defaultPassword" :disabled="!config.ssh.enabled" :placeholder="defaultHasPassword ? '●●●●●● (saved) — type a new one to update' : 'blank: uses your SSH key (~/.ssh)'" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)] disabled:opacity-50" />
+                <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">{{ t('Password') }} <span class="text-[var(--color-text-secondary)]/80 normal-case font-normal">{{ t('(OS keyring)') }}</span></label>
+                <input type="password" v-model="defaultPassword" :disabled="!config.ssh.enabled" :placeholder="defaultHasPassword ? t('●●●●●● (saved) — type a new one to update') : t('blank: uses your SSH key (~/.ssh)')" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)] disabled:opacity-50" />
                 <div class="flex items-center gap-2 mt-1.5">
                   <input type="checkbox" id="default-remember-pwd" v-model="config.ssh.remember_password" :disabled="!config.ssh.enabled" class="accent-[var(--color-accent)] rounded bg-[var(--bg-input)] border-[var(--color-input-border)]" />
-                  <label for="default-remember-pwd" class="text-xs font-medium text-[var(--color-text-secondary)] cursor-pointer select-none">Remember Password (OS Keyring)</label>
+                  <label for="default-remember-pwd" class="text-xs font-medium text-[var(--color-text-secondary)] cursor-pointer select-none">{{ t('Remember Password (OS Keyring)') }}</label>
                 </div>
                 <div class="text-[11px] mt-1 flex items-center gap-2">
                   <template v-if="defaultHasPassword">
-                    <span class="text-emerald-400">✓ Password saved (keyring)</span>
-                    <button type="button" @click="clearDefaultPassword" :disabled="!config.ssh.enabled" class="text-red-400/80 hover:text-red-400 underline disabled:opacity-50">clear</button>
+                    <span class="text-emerald-400">{{ t('✓ Password saved (keyring)') }}</span>
+                    <button type="button" @click="clearDefaultPassword" :disabled="!config.ssh.enabled" class="text-red-400/80 hover:text-red-400 underline disabled:opacity-50">{{ t('clear') }}</button>
                   </template>
-                  <span v-else class="text-[var(--color-text-secondary)]">No password → will use your SSH key (~/.ssh)</span>
+                  <span v-else class="text-[var(--color-text-secondary)]">{{ t('No password → will use your SSH key (~/.ssh)') }}</span>
                 </div>
               </div>
             </div>
@@ -296,7 +303,7 @@
                 class="bg-[var(--bg-button)] hover:bg-[var(--bg-button-hover)] text-[var(--color-text-primary)] font-semibold px-4 py-2 rounded-xl text-xs active:scale-[0.98] transition-all disabled:opacity-50 flex items-center gap-2"
               >
                 <span v-if="testingConnection" class="w-3 h-3 border-2 border-[var(--color-text-secondary)] border-t-transparent rounded-full animate-spin"></span>
-                {{ testingConnection ? 'Testing...' : 'Test Connection' }}
+                {{ testingConnection ? t('Testing...') : t('Test Connection') }}
               </button>
             </div>
           </div>
@@ -304,7 +311,7 @@
           <!-- Dynamic Targets List -->
           <div class="bg-[var(--bg-card)] backdrop-blur-2xl border border-[var(--color-border)] rounded-2xl p-6 space-y-4 shadow-[0_8px_32px_rgba(0,0,0,0.37)]">
             <div class="flex items-center justify-between border-b border-[var(--color-input-border)] pb-3">
-              <h3 class="text-sm font-semibold uppercase text-[var(--color-text-secondary)] tracking-wider">Dynamic Router Targets</h3>
+              <h3 class="text-sm font-semibold uppercase text-[var(--color-text-secondary)] tracking-wider">{{ t('Dynamic Router Targets') }}</h3>
               <div class="flex items-center gap-2">
                 <button
                   @click="openSshLoader"
@@ -314,7 +321,7 @@
                   <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                   </svg>
-                  Load SSH Config
+                  {{ t('Load SSH Config') }}
                 </button>
                 <button
                   @click="showAddTargetModal = true"
@@ -323,7 +330,7 @@
                   <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                   </svg>
-                  Add Target
+                  {{ t('Add Target') }}
                 </button>
               </div>
             </div>
@@ -333,11 +340,11 @@
               <table class="w-full text-left border-collapse">
                 <thead>
                   <tr class="border-b border-[var(--color-input-border)] text-xs font-semibold text-[var(--color-text-secondary)]">
-                    <th class="w-16 py-3 px-4 text-center">Status</th>
-                    <th class="w-40 py-3 px-4 text-left">Host Name / Alias</th>
-                    <th class="w-24 py-3 px-4 text-center">Type</th>
-                    <th class="py-3 px-4 text-left">Details</th>
-                    <th class="w-56 py-3 px-4 text-center">Actions</th>
+                    <th class="w-16 py-3 px-4 text-center">{{ t('Status') }}</th>
+                    <th class="w-40 py-3 px-4 text-left">{{ t('Host Name / Alias') }}</th>
+                    <th class="w-24 py-3 px-4 text-center">{{ t('Type') }}</th>
+                    <th class="py-3 px-4 text-left">{{ t('Details') }}</th>
+                    <th class="w-56 py-3 px-4 text-center">{{ t('Actions') }}</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-[var(--color-border)] text-sm">
@@ -360,14 +367,14 @@
                     </td>
                     <td class="py-3 px-4 text-center">
                       <div class="flex items-center justify-center gap-1.5">
-                        <button v-if="target.type === 'ssh'" @click="setAsDefault(idx)" class="px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-[var(--color-accent)]/10 text-[var(--color-accent)] border border-[var(--color-accent)]/25 hover:bg-[var(--color-accent)]/20 transition-colors">Set Default</button>
-                        <button @click="editTarget(idx)" class="px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-[var(--color-text-secondary)]/10 text-[var(--color-text-secondary)] border border-[var(--color-text-secondary)]/25 hover:bg-[var(--color-text-secondary)]/20 transition-colors">Edit</button>
-                        <button @click="deleteTarget(idx)" class="px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-red-500/10 text-red-400 border border-red-500/25 hover:bg-red-500/20 transition-colors">Delete</button>
+                        <button v-if="target.type === 'ssh'" @click="setAsDefault(idx)" class="px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-[var(--color-accent)]/10 text-[var(--color-accent)] border border-[var(--color-accent)]/25 hover:bg-[var(--color-accent)]/20 transition-colors">{{ t('Set Default') }}</button>
+                        <button @click="editTarget(idx)" class="px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-[var(--color-text-secondary)]/10 text-[var(--color-text-secondary)] border border-[var(--color-text-secondary)]/25 hover:bg-[var(--color-text-secondary)]/20 transition-colors">{{ t('Edit') }}</button>
+                        <button @click="deleteTarget(idx)" class="px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-red-500/10 text-red-400 border border-red-500/25 hover:bg-red-500/20 transition-colors">{{ t('Delete') }}</button>
                       </div>
                     </td>
                   </tr>
                   <tr v-if="!(config.targets || []).length">
-                    <td colspan="5" class="py-6 text-center text-[var(--color-text-secondary)] text-xs">No routing targets configured. Clipboard uploads will fallback to default host.</td>
+                    <td colspan="5" class="py-6 text-center text-[var(--color-text-secondary)] text-xs">{{ t('No routing targets configured. Clipboard uploads will fallback to default host.') }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -376,7 +383,7 @@
 
           <div class="flex justify-end pt-2">
             <button @click="saveSettings" class="flex items-center gap-2 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white px-6 py-2.5 rounded-full font-semibold shadow-sm shadow-[var(--color-accent)]/15 active:scale-[0.98] transition-all duration-150 text-sm">
-              Save Settings
+              {{ t('Save Settings') }}
             </button>
           </div>
         </div>
@@ -385,18 +392,18 @@
         <div v-if="activeTab === 'logs'" class="space-y-6 flex flex-col h-[calc(100vh-8rem)]">
           <div class="flex justify-between items-center shrink-0">
             <div>
-              <h2 class="text-2xl font-bold tracking-tight text-[var(--color-text-primary)]">System Logs</h2>
-              <p class="text-sm text-[var(--color-text-secondary)]">Real-time daemon events and screenshot processing logs.</p>
+              <h2 class="text-2xl font-bold tracking-tight text-[var(--color-text-primary)]">{{ t('System Logs') }}</h2>
+              <p class="text-sm text-[var(--color-text-secondary)]">{{ t('Real-time daemon events and screenshot processing logs.') }}</p>
             </div>
             <div class="flex items-center gap-2">
               <button @click="copyAllLogs" class="bg-[var(--bg-button)] hover:bg-[var(--bg-button-hover)] text-[var(--color-text-primary)] font-semibold px-3 py-1.5 rounded-xl text-xs active:scale-[0.98] transition-all">
-                Copy All
+                {{ t('Copy All') }}
               </button>
               <button @click="exportLogs" class="bg-[var(--bg-button)] hover:bg-[var(--bg-button-hover)] text-[var(--color-text-primary)] font-semibold px-3 py-1.5 rounded-xl text-xs active:scale-[0.98] transition-all">
-                Export…
+                {{ t('Export…') }}
               </button>
               <button @click="logs = []" class="bg-[var(--bg-button)] hover:bg-[var(--bg-button-hover)] text-[var(--color-text-primary)] font-semibold px-3 py-1.5 rounded-xl text-xs active:scale-[0.98] transition-all">
-                Clear Logs
+                {{ t('Clear Logs') }}
               </button>
             </div>
           </div>
@@ -405,7 +412,7 @@
             <div v-for="(log, idx) in logs" :key="idx" class="whitespace-pre-wrap leading-relaxed">
               <span class="text-[var(--color-text-secondary)]/80 select-none">[{{ idx + 1 }}]</span> {{ log }}
             </div>
-            <div v-if="!logs.length" class="text-[var(--color-text-secondary)]/80 text-center py-12">No logs loaded. Press global hotkey to trigger daemon activity.</div>
+            <div v-if="!logs.length" class="text-[var(--color-text-secondary)]/80 text-center py-12">{{ t('No logs loaded. Press global hotkey to trigger daemon activity.') }}</div>
           </div>
         </div>
 
@@ -415,68 +422,68 @@
     <!-- Add/Edit Target Modal -->
     <div v-if="showAddTargetModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
       <div class="bg-[var(--bg-card)] backdrop-blur-2xl border border-[var(--color-border)] rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
-        <h3 class="text-lg font-bold text-[var(--color-text-primary)]">{{ editingTargetIndex !== null ? 'Edit Router Target' : 'Add Router Target' }}</h3>
+        <h3 class="text-lg font-bold text-[var(--color-text-primary)]">{{ editingTargetIndex !== null ? t('Edit Router Target') : t('Add Router Target') }}</h3>
         
         <div class="space-y-3">
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">Target Type</label>
+              <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">{{ t('Target Type') }}</label>
               <select v-model="tempTarget.type" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)]">
-                <option value="ssh">SSH (Remote Server)</option>
-                <option value="local">Local Folder</option>
+                <option value="ssh">{{ t('SSH (Remote Server)') }}</option>
+                <option value="local">{{ t('Local Folder') }}</option>
               </select>
             </div>
             <div>
-              <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">Host Name / Alias</label>
-              <input type="text" v-model="tempTarget.match_pattern" placeholder="e.g. GPU-90, WSL" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)]" />
+              <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">{{ t('Host Name / Alias') }}</label>
+              <input type="text" v-model="tempTarget.match_pattern" :placeholder="t('e.g. GPU-90, WSL')" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)]" />
             </div>
           </div>
 
           <!-- SSH Target Fields -->
           <div v-if="tempTarget.type === 'ssh'" class="grid grid-cols-2 gap-3">
             <div>
-              <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">Host IP / Address</label>
+              <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">{{ t('Host IP / Address') }}</label>
               <input type="text" v-model="tempTarget.host" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)]" />
             </div>
             <div>
-              <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">Port</label>
+              <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">{{ t('Port') }}</label>
               <input type="number" v-model.number="tempTarget.port" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)]" />
             </div>
             <div>
-              <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">Username</label>
+              <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">{{ t('Username') }}</label>
               <input type="text" v-model="tempTarget.username" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)]" />
             </div>
             <div>
-              <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">Remote Copy Destination Folder</label>
+              <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">{{ t('Remote Copy Destination Folder') }}</label>
               <input type="text" v-model="tempTarget.remote_dir" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)]" />
             </div>
             <div>
-              <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">Password <span class="text-[var(--color-text-secondary)]/80 normal-case font-normal">(OS keyring)</span></label>
-              <input type="password" v-model="tempTarget.password" :placeholder="tempTargetHasPassword ? '●●●●●● (saved) — type a new one to update' : 'blank: uses your SSH key (~/.ssh)'" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)]" />
+              <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">{{ t('Password') }} <span class="text-[var(--color-text-secondary)]/80 normal-case font-normal">{{ t('(OS keyring)') }}</span></label>
+              <input type="password" v-model="tempTarget.password" :placeholder="tempTargetHasPassword ? t('●●●●●● (saved) — type a new one to update') : t('blank: uses your SSH key (~/.ssh)')" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)]" />
               <div class="flex items-center gap-2 mt-1.5">
                 <input type="checkbox" id="target-remember-pwd" v-model="tempTarget.remember_password" class="accent-[var(--color-accent)] rounded bg-[var(--bg-input)] border-[var(--color-input-border)]" />
-                <label for="target-remember-pwd" class="text-xs font-medium text-[var(--color-text-secondary)] cursor-pointer select-none">Remember Password (OS Keyring)</label>
+                <label for="target-remember-pwd" class="text-xs font-medium text-[var(--color-text-secondary)] cursor-pointer select-none">{{ t('Remember Password (OS Keyring)') }}</label>
               </div>
               <div class="text-[11px] mt-1 flex items-center gap-2">
                 <template v-if="tempTargetHasPassword">
-                  <span class="text-emerald-400">✓ Password saved (keyring)</span>
-                  <button type="button" @click="clearTargetPassword" class="text-red-400/80 hover:text-red-400 underline">clear</button>
+                  <span class="text-emerald-400">{{ t('✓ Password saved (keyring)') }}</span>
+                  <button type="button" @click="clearTargetPassword" class="text-red-400/80 hover:text-red-400 underline">{{ t('clear') }}</button>
                 </template>
-                <span v-else class="text-[var(--color-text-secondary)]">No password → will use your SSH key (~/.ssh)</span>
+                <span v-else class="text-[var(--color-text-secondary)]">{{ t('No password → will use your SSH key (~/.ssh)') }}</span>
               </div>
             </div>
           </div>
 
           <!-- Local Target Fields -->
           <div v-if="tempTarget.type === 'local'">
-            <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">Local Copy Destination Folder</label>
-            <input type="text" v-model="tempTarget.local_dir" placeholder="e.g. C:\users\docs\images" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)]" />
+            <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">{{ t('Local Copy Destination Folder') }}</label>
+            <input type="text" v-model="tempTarget.local_dir" :placeholder="t('e.g. C:\\users\\docs\\images')" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)]" />
           </div>
         </div>
 
         <div class="flex justify-end gap-3 pt-3 border-t border-[var(--color-input-border)]">
-          <button @click="closeTargetModal" class="bg-[var(--bg-button)] hover:bg-[var(--bg-button-hover)] text-[var(--color-text-primary)] px-4 py-2 rounded-xl text-xs font-semibold">Cancel</button>
-          <button @click="saveTarget" class="bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white px-4 py-2 rounded-xl text-xs font-semibold">Save</button>
+          <button @click="closeTargetModal" class="bg-[var(--bg-button)] hover:bg-[var(--bg-button-hover)] text-[var(--color-text-primary)] px-4 py-2 rounded-xl text-xs font-semibold">{{ t('Cancel') }}</button>
+          <button @click="saveTarget" class="bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white px-4 py-2 rounded-xl text-xs font-semibold">{{ t('Save') }}</button>
         </div>
       </div>
     </div>
@@ -484,13 +491,13 @@
     <!-- SSH Config Loader Modal -->
     <div v-if="showSshModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
       <div class="bg-[var(--bg-card)] backdrop-blur-2xl border border-[var(--color-border)] rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
-        <h3 class="text-lg font-bold text-[var(--color-text-primary)]">Load OpenSSH config</h3>
+        <h3 class="text-lg font-bold text-[var(--color-text-primary)]">{{ t('Load OpenSSH config') }}</h3>
         <div class="flex items-center gap-2">
           <input type="text" v-model="sshConfigPath" placeholder="~/.ssh/config" class="flex-1 bg-[var(--bg-input)]/60 border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)] font-mono" />
-          <button @click="browseSshConfig" :disabled="loadingSsh" class="bg-white/5 hover:bg-white/10 border border-[var(--color-border)] text-[var(--color-text-primary)] font-semibold px-3 py-2 rounded-xl text-xs disabled:opacity-50 whitespace-nowrap">Browse…</button>
-          <button @click="openSshLoader" :disabled="loadingSsh" class="bg-white/5 hover:bg-white/10 border border-[var(--color-border)] text-[var(--color-text-primary)] font-semibold px-3 py-2 rounded-xl text-xs disabled:opacity-50 whitespace-nowrap">Load</button>
+          <button @click="browseSshConfig" :disabled="loadingSsh" class="bg-white/5 hover:bg-white/10 border border-[var(--color-border)] text-[var(--color-text-primary)] font-semibold px-3 py-2 rounded-xl text-xs disabled:opacity-50 whitespace-nowrap">{{ t('Browse…') }}</button>
+          <button @click="openSshLoader" :disabled="loadingSsh" class="bg-white/5 hover:bg-white/10 border border-[var(--color-border)] text-[var(--color-text-primary)] font-semibold px-3 py-2 rounded-xl text-xs disabled:opacity-50 whitespace-nowrap">{{ t('Load') }}</button>
         </div>
-        <input type="text" v-model="sshSearch" placeholder="Search hosts (alias / host / user)..." class="w-full bg-[var(--bg-input)]/60 border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)]" />
+        <input type="text" v-model="sshSearch" :placeholder="t('Search hosts (alias / host / user)...')" class="w-full bg-[var(--bg-input)]/60 border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)]" />
         <div class="max-h-72 overflow-y-auto space-y-1 pr-1">
           <label v-for="{ h, i } in filteredSshHosts" :key="i" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 cursor-pointer">
             <input type="checkbox" v-model="sshSelected[i]" class="accent-[var(--color-accent)] w-4 h-4" />
@@ -499,13 +506,13 @@
               <div class="text-xs text-[var(--color-text-secondary)] truncate font-mono">{{ h.username }}@{{ h.host }}:{{ h.port }}</div>
             </div>
           </label>
-          <div v-if="!filteredSshHosts.length" class="text-[var(--color-text-secondary)] text-center py-8 text-sm">No hosts found.</div>
+          <div v-if="!filteredSshHosts.length" class="text-[var(--color-text-secondary)] text-center py-8 text-sm">{{ t('No hosts found.') }}</div>
         </div>
         <div class="flex items-center justify-between pt-3 border-t border-[var(--color-border)]">
-          <button @click="toggleAllSsh(true)" class="text-xs font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors">Select All</button>
+          <button @click="toggleAllSsh(true)" class="text-xs font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors">{{ t('Select All') }}</button>
           <div class="flex gap-3">
-            <button @click="closeSshModal" class="bg-white/5 hover:bg-white/10 text-[var(--color-text-primary)] px-4 py-2 rounded-xl text-xs font-semibold">Cancel</button>
-            <button @click="importSshSelected" class="bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white px-4 py-2 rounded-xl text-xs font-semibold">Import Selected</button>
+            <button @click="closeSshModal" class="bg-white/5 hover:bg-white/10 text-[var(--color-text-primary)] px-4 py-2 rounded-xl text-xs font-semibold">{{ t('Cancel') }}</button>
+            <button @click="importSshSelected" class="bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white px-4 py-2 rounded-xl text-xs font-semibold">{{ t('Import Selected') }}</button>
           </div>
         </div>
       </div>
@@ -532,6 +539,13 @@ import { ref, onMounted, nextTick, computed, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
+import { ZH, THEME_ZH } from './strings.js';
+
+// UI localization (Milestone 6-I): keys are the English source strings; zh-CN
+// swaps them via the ZH dictionary, anything else shows the key as-is.
+const APP_VERSION = '0.3.11';
+const lang = ref('zh-CN');
+const t = (s) => (lang.value === 'zh-CN' && Object.prototype.hasOwnProperty.call(ZH, s) ? ZH[s] : s);
 
 // Active Tab
 const activeTab = ref('general');
@@ -564,6 +578,7 @@ const config = ref({
   injection_mode: 'auto',
   clean_keep_days: 1,
   theme: 'dracula',
+  language: 'zh-CN',
   ssh: {
     enabled: false,
     host: '',
@@ -666,12 +681,22 @@ const themes = {
 };
 
 const currentTheme = computed(() => {
-  const t = config.value?.theme || 'apple-dark';
-  return themes[t] || themes['apple-dark'];
+  const name = config.value?.theme || 'apple-dark';
+  return themes[name] || themes['apple-dark'];
 });
 
 // Pretty label for the theme <select> options ("apple-dark" -> "Apple Dark").
-const themeLabel = (name) => name.split('-').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
+const themeLabel = (name) =>
+  lang.value === 'zh-CN' && Object.prototype.hasOwnProperty.call(THEME_ZH, name)
+    ? THEME_ZH[name]
+    : name.split('-').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
+
+// Language follows config.language (set on load, switched live by the dropdown).
+watch(
+  () => config.value && config.value.language,
+  (v) => { lang.value = v || 'zh-CN'; },
+  { immediate: true }
+);
 
 // Logs Container & History
 const logs = ref([]);
@@ -681,9 +706,9 @@ const logContainer = ref(null);
 async function copyAllLogs() {
   try {
     await invoke('copy_logs');
-    showToast('Logs copied to clipboard.');
+    showToast(t('Logs copied to clipboard.'));
   } catch (err) {
-    showToast(`Failed to copy logs: ${err}`, true);
+    showToast(`${t('Failed to copy logs:')} ${err}`, true);
   }
 }
 
@@ -696,9 +721,9 @@ async function exportLogs() {
     });
     if (!path) return;
     await invoke('write_logs', { path });
-    showToast(`Logs exported to: ${path}`);
+    showToast(`${t('Logs exported to:')} ${path}`);
   } catch (err) {
-    showToast(`Failed to export logs: ${err}`, true);
+    showToast(`${t('Failed to export logs:')} ${err}`, true);
   }
 }
 
@@ -780,7 +805,7 @@ const openSshLoader = async () => {
     sshSearch.value = '';
     showSshModal.value = true;
   } catch (err) {
-    showToast(`Failed to load SSH config: ${err}`, true);
+    showToast(`${t('Failed to load SSH config:')} ${err}`, true);
   } finally {
     loadingSsh.value = false;
   }
@@ -799,7 +824,7 @@ const browseSshConfig = async () => {
       await openSshLoader();
     }
   } catch (err) {
-    showToast(`Failed to open file dialog: ${err}`, true);
+    showToast(`${t('Failed to open file dialog:')} ${err}`, true);
   }
 };
 
@@ -824,9 +849,9 @@ const importSshSelected = () => {
     if (!sshSelected.value[i]) return;
     
     // Deduplicate: check if there's already a target with the same type and match_pattern
-    const exists = config.value.targets.some(t => 
-      t.type === 'ssh' && 
-      t.match_pattern.toLowerCase() === h.alias.toLowerCase()
+    const exists = config.value.targets.some(tgt =>
+      tgt.type === 'ssh' &&
+      tgt.match_pattern.toLowerCase() === h.alias.toLowerCase()
     );
     
     if (exists) {
@@ -849,24 +874,24 @@ const importSshSelected = () => {
   });
   closeSshModal();
   if (skipped > 0) {
-    showToast(`Imported ${added} host(s), skipped ${skipped} duplicate(s) as router targets.`);
+    showToast(`${t('Imported')} ${added} ${t('host(s),')} ${skipped} ${t('duplicate(s) skipped')}`);
   } else {
-    showToast(`Imported ${added} host(s) as router targets.`);
+    showToast(`${t('Imported')} ${added} ${t('host(s) as router targets')}`);
   }
 };
 
 // Copy a router target's SSH host into the default host configuration
 const setAsDefault = async (index) => {
-  const t = config.value.targets[index];
-  if (!t || t.type !== 'ssh') return;
+  const tgt = config.value.targets[index];
+  if (!tgt || tgt.type !== 'ssh') return;
   config.value.ssh = {
     enabled: true,
-    host: t.host || '',
-    port: t.port || 22,
-    username: t.username || '',
-    remote_dir: t.remote_dir || config.value.ssh?.remote_dir || '/tmp/img2cli',
-    match_pattern: t.match_pattern || '',
-    remember_password: t.remember_password !== undefined ? t.remember_password : true
+    host: tgt.host || '',
+    port: tgt.port || 22,
+    username: tgt.username || '',
+    remote_dir: tgt.remote_dir || config.value.ssh?.remote_dir || '/tmp/img2cli',
+    match_pattern: tgt.match_pattern || '',
+    remember_password: tgt.remember_password !== undefined ? tgt.remember_password : true
   };
 
   // Clear current password input to avoid inserting password text across hosts
@@ -875,15 +900,15 @@ const setAsDefault = async (index) => {
   // Check if keyring already contains password for this host to update UI status indicator
   try {
     defaultHasPassword.value = await invoke('has_ssh_password', {
-      user: t.username || '',
-      host: t.host || '',
-      port: t.port || null
+      user: tgt.username || '',
+      host: tgt.host || '',
+      port: tgt.port || null
     });
   } catch (_) {
     defaultHasPassword.value = false;
   }
 
-  showToast(`Set "${t.match_pattern}" as the default SSH host.`);
+  showToast(`"${tgt.match_pattern}" ${t('set as the default SSH host.')}`);
 };
 
 // Load Configurations
@@ -899,9 +924,9 @@ const loadConfig = async () => {
     if (!data.targets) {
       data.targets = [];
     } else {
-      data.targets.forEach(t => {
-        if (t.remember_password === undefined) {
-          t.remember_password = true; // default to true if missing
+      data.targets.forEach(tgt => {
+        if (tgt.remember_password === undefined) {
+          tgt.remember_password = true; // default to true if missing
         }
       });
     }
@@ -918,7 +943,7 @@ const loadConfig = async () => {
       } catch (_) { /* ignore */ }
     }
   } catch (err) {
-    showToast(`Failed to load configuration: ${err}`, true);
+    showToast(`${t('Failed to load configuration:')} ${err}`, true);
   }
 };
 
@@ -947,9 +972,9 @@ const saveSettings = async () => {
     await invoke('save_config', { config: config.value });
     lastSavedGlobalHotkey.value = config.value.global_hotkey;
     lastSavedScreenshotHotkey.value = config.value.screenshot_hotkey;
-    showToast('Settings saved successfully!');
+    showToast(t('Settings saved successfully!'));
   } catch (err) {
-    showToast(`Failed to save settings: ${err}`, true);
+    showToast(`${t('Failed to save settings:')} ${err}`, true);
   }
 };
 
@@ -965,7 +990,7 @@ const checkSSHConnection = async () => {
     });
     showToast(res);
   } catch (err) {
-    showToast(`Connection failed: ${err}`, true);
+    showToast(`${t('Connection failed:')} ${err}`, true);
   } finally {
     testingConnection.value = false;
   }
@@ -1124,9 +1149,9 @@ const clearDefaultPassword = async () => {
     await invoke('clear_ssh_password', { user: config.value.ssh.username || '', host: config.value.ssh.host || '', port: config.value.ssh.port || null });
     defaultHasPassword.value = false;
     defaultPassword.value = '';
-    showToast('Password cleared.');
+    showToast(t('Password cleared.'));
   } catch (err) {
-    showToast(`Failed to clear: ${err}`, true);
+    showToast(`${t('Failed to clear:')} ${err}`, true);
   }
 };
 const clearTargetPassword = async () => {
@@ -1134,9 +1159,9 @@ const clearTargetPassword = async () => {
     await invoke('clear_ssh_password', { user: tempTarget.value.username || '', host: tempTarget.value.host || '', port: tempTarget.value.port || null });
     tempTargetHasPassword.value = false;
     tempTarget.value.password = '';
-    showToast('Password cleared.');
+    showToast(t('Password cleared.'));
   } catch (err) {
-    showToast(`Failed to clear: ${err}`, true);
+    showToast(`${t('Failed to clear:')} ${err}`, true);
   }
 };
 
@@ -1158,13 +1183,13 @@ const editTarget = async (index) => {
 // Delete Custom Target
 const deleteTarget = (index) => {
   config.value.targets.splice(index, 1);
-  showToast('Target deleted.');
+  showToast(t('Target deleted.'));
 };
 
 // Save Custom Target (add or edit)
 const saveTarget = async () => {
   if (!tempTarget.value.match_pattern.trim()) {
-    showToast('Match pattern cannot be empty.', true);
+    showToast(t('Match pattern cannot be empty.'), true);
     return;
   }
 
@@ -1189,7 +1214,7 @@ const saveTarget = async () => {
           tempTargetHasPassword.value = true;
           pwAction = 'stored';
         } catch (err) {
-          showToast(`Saved target, but password not stored: ${err}`, true);
+          showToast(`${t('Saved target, but password not stored:')} ${err}`, true);
         }
       }
     } else {
@@ -1205,11 +1230,11 @@ const saveTarget = async () => {
 
   closeTargetModal();
   if (pwAction === 'stored') {
-    showToast('Target saved · password stored in keyring');
+    showToast(t('Target saved · password stored in keyring'));
   } else if (pwAction === 'cleared') {
-    showToast('Target saved · password cleared from keyring');
+    showToast(t('Target saved · password cleared from keyring'));
   } else {
-    showToast('Target updated.');
+    showToast(t('Target updated.'));
   }
 };
 
