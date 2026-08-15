@@ -81,7 +81,7 @@ This file tracks future architecture improvements, user experience features, and
 
 ## 7. Milestone 6: UX Simplification Batch (Short-Term, v0.3.12 candidate)
 
-> Recorded 2026-08-14 after real-world v0.3.11 testing on Orca; items E–H added 2026-08-15. **Deferred by decision — do not implement until picked up deliberately.**
+> Recorded 2026-08-14 after real-world v0.3.11 testing on Orca; items E–J added 2026-08-15. **Deferred by decision — do not implement until picked up deliberately.**
 
 ### A. Main Window Free Resizing
 * **Defect**: The Settings window is locked at 800×600 and cannot be resized.
@@ -137,3 +137,18 @@ This file tracks future architecture improvements, user experience features, and
   2. Status wiring: reuse the existing `test_connection` IPC for the Test button; cache the last result as the status dot.
   3. Import button → existing `load_ssh_config` (imports from `~/.ssh/config`).
   4. Connect/Disconnect don't map 1:1 (img2cli uploads on demand) — map them to enable/disable + password set/clear.
+
+### I. UI Localization (中文界面)
+* **Gap**: The Settings UI is English-only. The user's primary language is Chinese — they referenced Snipaste's "显示语言" setting (its settings UI ships in Simplified Chinese) as the expected experience. *(User's original phrasing said "英文版" but context makes clear they mean a Chinese version — confirm before implementing.)*
+* **Action**:
+  1. Add a lightweight frontend i18n layer (a `zh-CN` + `en` string dictionary; no heavy framework needed for a settings-sized UI).
+  2. Add a `language` field to `AppConfig` + a Display Language dropdown in General Settings; default `zh-CN`.
+  3. Translate the General Settings / Hosts & Targets / System Logs vocabulary; keep hotkeys, paths, and log lines (diagnostics) in English.
+
+### J. Snipaste-Style Automatic Window Detection in the Capture Overlay
+* **Gap**: Today the capture overlay (v0.3.7) requires a manual drag to define the region. Snipaste, on hotkey press, immediately outlines the window under the cursor (blue border — full screen or the app's window) with operation hints; click snaps that window.
+* **Behavior wanted**: press screenshot hotkey → frozen overlay shows the hovered window auto-outlined (colored border) + hint tips; click = snap that window; drag = custom region (existing editor with handles stays).
+* **Action**:
+  1. Enumerate on-screen window rects per platform (Win32 `EnumWindows`+`GetWindowRect` filtering visible/owned; macOS `CGWindowList`; Linux X11) and expose them to the overlay alongside the frozen frame.
+  2. In the overlay, hit-test cursor position against window rects (CSS→physical px conversion, same scale handling as `capture_region`), draw the hover outline + dimension labels + hint bar.
+  3. Click-to-snap feeds the window rect into the existing crop path; drag still enters the adjustable-selection editor.
