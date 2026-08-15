@@ -394,7 +394,7 @@ fn load_ssh_config(path: Option<String>) -> Result<Vec<ssh_config::SshHostEntry>
     Ok(ssh_config::parse_ssh_config(&content))
 }
 
-/// Re-launch the app elevated (Windows only) so SendInput/Enigo can reach
+/// Re-launch the app elevated (Windows only) so Enigo can reach
 /// terminals that run as Administrator. UIPI otherwise blocks synthetic input
 /// into a higher-integrity window, producing
 /// "not all input events were sent ... blocked by UIPI".

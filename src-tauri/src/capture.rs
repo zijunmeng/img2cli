@@ -141,7 +141,11 @@ pub fn capture_region(
                 "Screenshot captured. Switch to your AI CLI, press {} to upload, then Ctrl+V.",
                 hotkey
             ),
-            _ => format!(
+            crate::config::InjectionMode::Auto => format!(
+                "Screenshot captured. Switch to your AI CLI and press {} to upload (pastes automatically where supported; otherwise Ctrl+V).",
+                hotkey
+            ),
+            crate::config::InjectionMode::Direct => format!(
                 "Screenshot captured. Switch to your AI CLI and press {} to upload + paste.",
                 hotkey
             ),

@@ -162,11 +162,9 @@
               <div>
                 <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">Injection Mode</label>
                 <select v-model="config.injection_mode" class="w-full bg-[var(--bg-input)] border border-[var(--color-input-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-primary)]">
-                  <option value="auto">Auto — Paste automatically; fall back to manual Ctrl+V (Recommended)</option>
-                  <option value="direct">Direct — Keystroke Injection (no clipboard)</option>
-                  <option value="swap">Auto Paste + Restore Clipboard (Ctrl+V, restores original)</option>
-                  <option value="paste_keep">Auto Paste — Keep Text (Ctrl+V, no restore — for VSCode Remote)</option>
-                  <option value="copy">Copy Only — Manual Ctrl+V (for VSCode Remote / Claude Code)</option>
+                  <option value="auto">Auto — per-app strategy (recommended)</option>
+                  <option value="direct">Direct — type the path (no clipboard)</option>
+                  <option value="copy">Copy Only — manual Ctrl+V</option>
                 </select>
               </div>
 
@@ -563,7 +561,7 @@ const config = ref({
   global_hotkey: 'Alt+V',
   screenshot_hotkey: 'Alt+Shift+S',
   upload_strategy: 'eager',
-  injection_mode: 'direct',
+  injection_mode: 'auto',
   clean_keep_days: 1,
   theme: 'dracula',
   ssh: {

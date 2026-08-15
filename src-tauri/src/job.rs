@@ -7,7 +7,7 @@
 //! Why a single worker (no concurrent uploads)?
 //!   * Ordering matters more than throughput for a human-paced tool — two
 //!     back-to-back captures must inject in the order they were taken, and
-//!     `inject_swap`'s clipboard backup/restore must never interleave.
+//!     clipboard writes must never interleave.
 //!   * A bounded backlog (capacity `QUEUE_CAPACITY`) absorbs a quick double-fire
 //!     instead of dropping the second capture the way the mutex did.
 //!
@@ -370,7 +370,7 @@ fn process_job(job: &mut TransferJob) -> Result<JobCompletion, AppError> {
     job.log(&format!("Delivered: {}", delivered.delivered_path));
     // The paste-text CONTENT is always decided by output_format (+ optional
     // quote wrap). injection_mode only controls HOW it's delivered
-    // (direct/swap/paste_keep/copy), never the text itself.
+    // (direct/copy — resolved per host by host_policy), never the text itself.
     let paste_text = wrap_quotes(
         crate::cli_adapter::adapter_for(&job.config.output_format)
             .render(&delivered.delivered_path),
@@ -403,18 +403,30 @@ fn wrap_quotes(s: String, wrap: bool) -> String {
 }
 
 /// Resolve the host-policy-effective injection mode for the current foreground
-/// window, and log when it overrides the global config mode. Returns the mode
-/// to actually use for injection. (P1 — see `host_policy`.)
+/// window. Under `Auto` the policy decides everything (rule match, else
+/// Direct) — logged as a resolution, not an override; for explicit global
+/// modes a rule hit is logged as an override with a manual-paste hint.
+/// Returns the mode to actually use for injection.
 fn resolve_effective_mode(job: &TransferJob, inject_window: &Option<String>) -> InjectionMode {
     let effective = crate::host_policy::resolve_injection_mode(
         inject_window.as_deref(),
         job.config.injection_mode,
     );
-    if effective != job.config.injection_mode {
-        job.log(&format!(
-            "Host policy override: {:?} → {:?} (global {:?}). For this host, press Ctrl+V to paste.",
-            inject_window, effective, job.config.injection_mode
-        ));
+    match job.config.injection_mode {
+        InjectionMode::Auto => {
+            job.log(&format!(
+                "[auto] host policy: {:?} → {}",
+                inject_window,
+                effective.as_str()
+            ));
+        }
+        _ if effective != job.config.injection_mode => {
+            job.log(&format!(
+                "Host policy override: {:?} → {:?} (global {:?}). For this host, press Ctrl+V to paste.",
+                inject_window, effective, job.config.injection_mode
+            ));
+        }
+        _ => {}
     }
     effective
 }

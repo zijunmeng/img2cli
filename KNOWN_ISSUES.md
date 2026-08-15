@@ -35,25 +35,20 @@ This file tracks current, observable defects, platform limitations, and security
 
 > Recorded as a **reproducible test matrix + recommended strategy**, not as proven root cause. Internal filtering mechanisms are working hypotheses — full baseline in [docs/ISSUES_20260809.md](docs/ISSUES_20260809.md). This framing keeps the section accurate across Windows / VS Code updates.
 
-**Observed host matrix (2026-08-09):**
+**Observed host matrix** (verified 2026-08-09; mode set consolidated in v0.3.12):
 
-| Host | Virtual-key Ctrl+V (Auto / Swap / PasteKeep) | Enigo Unicode (Direct) |
+| Host | Enigo Unicode typing (Direct) | Clipboard + manual Ctrl+V (Copy) |
 | --- | --- | --- |
-| Plain terminal (Windows Terminal / cmd / Claude Code run directly) | ✅ | ✅¹ |
-| **VS Code integrated terminal** | ❌ (`SendInput` returns `inserted=0`) | ✅ as Administrator |
-| **Orca agent terminal** (onorca.dev) | ❌ | ❌ (even as Administrator) |
-| Browser tab (web-based AI) | ❌ | not tested |
+| Plain terminal (Windows Terminal / cmd / Claude Code run directly) | ✅¹ | ✅ |
+| **VS Code integrated terminal** | ✅ as Administrator | ✅ |
+| **Orca agent terminal** (onorca.dev) | ❌ (even as Administrator) | ✅ (the only working option) |
+| Browser tab (web-based AI) | not tested | ✅ |
 
 ¹ Direct is bounded by UIPI: img2cli's integrity must be ≥ the target window. Same-integrity works without elevation; injecting into an elevated window requires img2cli itself to be elevated.
 
-**Auto-degradation (still accurate for virtual-key modes):** When `SendInput` returns `<4` events (virtual keys) or the preflight times out waiting for modifier keys to release, img2cli copies the reference path to the clipboard and enters `ReadyToPaste` (NOT `Failed`). The image was still uploaded — press `Ctrl+V` manually.
+**v0.3.12 semantics:** the former Swap / PasteKeep modes (simulated Ctrl+V via `SendInput`) were removed — Chromium-family hosts reject synthetic virtual-key shortcuts, and plain terminals never uniquely needed them over typing. Old config values migrate automatically (`swap` → auto, `paste_keep` → copy). **Auto is now genuinely automatic**: the host policy resolves per focused app (Orca → Copy, everything else → Direct), and because Direct delivery cannot be verified, the job layer also copies the path to the clipboard as insurance when `fallback_to_copy` is on. Injection API errors still fall back to copy + `ReadyToPaste`.
 
-**Silent-failure gap (Direct mode):** Enigo's `text()` returns `Ok` whenever `SendInput` queues the events — even if the host ignores them downstream (Orca). So **no fallback fires** and the path lands in *neither* the target nor the clipboard. This is the worst failure mode; fixing it (define success as verifiable delivery, keep a clipboard copy) is the baseline's P0.
-
-**Recommended strategy:**
-* **VS Code (Claude Code / Codex inside):** Injection Mode → **Direct** + *Restart as Administrator*. (Auto/Swap virtual-key Ctrl+V is rejected here.)
-* **Orca / hosts that reject Direct too:** Injection Mode → **Copy Only** + manual `Ctrl+V`.
-* **Claude Code path format:** Output Format → **Raw Path** (bare absolute path → `[Image #N]`); Wrap in Single Quotes → **OFF**.
+**Recommended strategy:** Injection Mode → **Auto** (default). For VS Code, run as Administrator so Direct typing gets through; Orca is forced to Copy + manual `Ctrl+V` automatically. **Claude Code path format:** Output Format → **Raw Path** (bare absolute path → `[Image #N]`); Wrap in Single Quotes → **OFF**.
 
 **Not proven:** whether hosts filter on the `LLKHF_INJECTED` flag, DOM `isTrusted`, or something else. Treat as hypothesis — re-test per host if behavior changes.
 

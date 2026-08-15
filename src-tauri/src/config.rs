@@ -64,11 +64,11 @@ pub struct AppConfig {
     #[serde(default = "default_theme")]
     pub theme: String,
 
-    // v0.3.10 injection tuning (spec §12)
-    #[serde(default = "default_post_paste_wait_ms")]
-    pub post_paste_wait_ms: u32,
-    #[serde(default = "default_input_release_timeout_ms")]
-    pub input_release_timeout_ms: u32,
+    // When Direct injection can't be verified as delivered, also copy the
+    // path to the clipboard as insurance (P0, docs/ISSUES_20260809.md §2).
+    // The former post_paste_wait_ms / input_release_timeout_ms fields were
+    // never read anywhere and were removed in v0.3.12 along with the
+    // swap/paste_keep machinery they were meant to tune.
     #[serde(default = "default_fallback_to_copy")]
     pub fallback_to_copy: bool,
 
@@ -90,22 +90,29 @@ fn default_global_hotkey() -> String { "Alt+V".to_string() }
 fn default_screenshot_hotkey() -> String { "Alt+Shift+S".to_string() }
 fn default_upload_strategy() -> String { "eager".to_string() }
 fn default_clean_keep_days() -> u32 { 1 }
-fn default_theme() -> String { "apple-dark".to_string() }
-fn default_post_paste_wait_ms() -> u32 { 500 }
-fn default_input_release_timeout_ms() -> u32 { 1000 }
+fn default_theme() -> String { "dracula".to_string() }
 fn default_fallback_to_copy() -> bool { true }
 
-/// How the generated paste-text is delivered to the AI CLI (v0.3.10 spec §6.1).
-/// serde `rename_all = "snake_case"` keeps backward compat with v0.3.9 string
-/// values (`"direct"`, `"swap"`, `"paste_keep"`, `"copy"`). Missing → `Auto`;
-/// illegal value → config-load error (not silently `Direct`).
+/// How the generated paste-text is delivered to the AI CLI.
+/// v0.3.12 consolidated five modes down to three:
+/// - `Auto`   — the host policy decides per focused app (`host_policy`):
+///   Direct where typing works, Copy for hosts that reject all synthetic
+///   input.
+/// - `Direct` — Enigo Unicode keystrokes, no clipboard (best-effort; the job
+///   layer adds a clipboard insurance copy when `fallback_to_copy` is on).
+/// - `Copy`   — clipboard only; the user pastes manually (Ctrl+V).
+///
+/// serde `rename_all = "snake_case"`. The removed v0.3.9–v0.3.11 values are
+/// accepted as aliases (`"swap"` → Auto, `"paste_keep"` → Copy) so old
+/// config.toml files load cleanly and normalize on the next save. Missing →
+/// `Auto`; any other value → config-load error.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum InjectionMode {
+    #[serde(alias = "swap")]
     Auto,
     Direct,
-    Swap,
-    PasteKeep,
+    #[serde(alias = "paste_keep")]
     Copy,
 }
 
@@ -114,14 +121,11 @@ fn default_injection_mode() -> InjectionMode {
 }
 
 impl InjectionMode {
-    /// snake_case string used by the injector's match arms (backward compat
-    /// with v0.3.9's string-based dispatch).
+    /// snake_case string used by the injector's match arms.
     pub fn as_str(&self) -> &'static str {
         match self {
             InjectionMode::Auto => "auto",
             InjectionMode::Direct => "direct",
-            InjectionMode::Swap => "swap",
-            InjectionMode::PasteKeep => "paste_keep",
             InjectionMode::Copy => "copy",
         }
     }
@@ -144,8 +148,6 @@ impl Default for AppConfig {
             injection_mode: default_injection_mode(),
             clean_keep_days: default_clean_keep_days(),
             theme: default_theme(),
-            post_paste_wait_ms: default_post_paste_wait_ms(),
-            input_release_timeout_ms: default_input_release_timeout_ms(),
             fallback_to_copy: default_fallback_to_copy(),
             ssh: Some(SshConfig {
                 enabled: false,
@@ -209,6 +211,24 @@ impl AppConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_injection_mode_migration_aliases() {
+        // v0.3.11-and-older configs stored swap / paste_keep — they must keep
+        // loading, normalizing onto the consolidated 3-mode set (v0.3.12).
+        let cfg: AppConfig = toml::from_str("injection_mode = 'swap'").unwrap();
+        assert_eq!(cfg.injection_mode, InjectionMode::Auto);
+        let cfg: AppConfig = toml::from_str("injection_mode = 'paste_keep'").unwrap();
+        assert_eq!(cfg.injection_mode, InjectionMode::Copy);
+
+        // Canonical values parse and round-trip serialization normalizes to
+        // them, so the next save rewrites old values permanently.
+        let cfg: AppConfig = toml::from_str("injection_mode = 'copy'").unwrap();
+        assert_eq!(cfg.injection_mode, InjectionMode::Copy);
+        let out = toml::to_string(&cfg).unwrap();
+        assert!(out.contains("injection_mode = \"copy\""));
+        assert!(!out.contains("paste_keep"));
+    }
 
     #[test]
     fn test_default_config() {
