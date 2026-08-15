@@ -9,6 +9,7 @@ This file tracks future architecture improvements, user experience features, and
 * **Primary Target**: Windows (`x86_64-pc-windows-gnu` / setup installer and portable zip).
 * **Secondary Targets**: macOS (Apple Silicon & Intel DMG) and Linux (Portable AppImage).
 * **Guiding Principle**: Zero-dependency background operation with low memory overhead (<25MB idle).
+* **Version digits rule** (from 2026-08-16): read versions as decimals — the patch digit is 0–9 only; carry into minor at 10 (`0.3.9 → 0.4.0`, never `0.3.10`). Historical tags v0.3.10–v0.3.15 predate the rule and stay; the next release is **v0.4.0**.
 
 ---
 
