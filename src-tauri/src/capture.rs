@@ -19,9 +19,17 @@ pub fn capture_full_screen(app: &AppHandle, state: &DaemonState) -> Result<(), S
 
         // Auto window detection (Roadmap 6-J): snapshot the on-screen window
         // rects alongside the frozen frame. CSS px = physical px / scale.
-        // Filter: titled, non-minimized, reasonably sized windows — empty
-        // titles skip tool overlays (including our own capture window).
+        // Filters (greenshot-verified P0s, v0.4.0): titled, non-minimized,
+        // reasonably sized; only windows on the CAPTURED monitor (other
+        // monitors' windows would map outside the frozen frame); rects
+        // intersected with the monitor bounds (maximized/snapped overhang,
+        // off-screen junk). xcap rects are client-area on Windows — no DWM
+        // shadow margin involved — and cloaked/UWP-ghost filtering is already
+        // handled inside xcap.
         let scale = mon.scale_factor().unwrap_or(1.0);
+        let mon_id = mon.id().ok();
+        let mon_w = mon.width() as i32;
+        let mon_h = mon.height() as i32;
         let mut rects = Vec::new();
         if let Ok(windows) = xcap::Window::all() {
             for w in windows {
@@ -33,11 +41,22 @@ pub fn capture_full_screen(app: &AppHandle, state: &DaemonState) -> Result<(), S
                 if minimized || title.is_empty() || width < 40 || height < 40 {
                     continue;
                 }
+                if w.current_monitor().ok().and_then(|m| m.id().ok()) != mon_id {
+                    continue; // lives on another monitor
+                }
+                // Intersect with the monitor (physical px).
+                let left = x.max(0);
+                let top = y.max(0);
+                let right = (x + width as i32).min(mon_w);
+                let bottom = (y + height as i32).min(mon_h);
+                if right - left < 40 || bottom - top < 40 {
+                    continue;
+                }
                 rects.push(daemon::WindowRect {
-                    x: (x as f32 / scale) as i32,
-                    y: (y as f32 / scale) as i32,
-                    w: (width as f32 / scale) as i32,
-                    h: (height as f32 / scale) as i32,
+                    x: (left as f32 / scale) as i32,
+                    y: (top as f32 / scale) as i32,
+                    w: ((right - left) as f32 / scale) as i32,
+                    h: ((bottom - top) as f32 / scale) as i32,
                     title,
                 });
             }

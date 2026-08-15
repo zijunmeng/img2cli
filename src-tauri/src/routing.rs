@@ -265,6 +265,33 @@ impl RouteResolver for DefaultSshResolver {
     }
 
     fn resolve(&self, request: &RouteRequest<'_>) -> Result<Option<RouteCandidate>, RouteError> {
+        // v0.4.0 (6-Q): the default host is a flag on a target card; the
+        // legacy `config.ssh` struct remains as a fallback for configs that
+        // predate the flag (and as the no-targets default).
+        if let Some(targets) = request.config.targets.as_ref() {
+            if let Some(t) = targets
+                .iter()
+                .find(|t| t.is_default && t.enabled && t.r#type == "ssh")
+            {
+                if let Some(host) = t.host.as_ref().filter(|h| !h.is_empty()) {
+                    return Ok(Some(RouteCandidate {
+                        target: DeliveryTarget::Ssh(SshTarget {
+                            host: host.clone(),
+                            port: t.port.unwrap_or(22),
+                            username: t.username.clone().unwrap_or_default(),
+                            remote_dir: t
+                                .remote_dir
+                                .clone()
+                                .unwrap_or_else(|| "/tmp/img2cli".to_string()),
+                            source_alias: Some(t.match_pattern.clone()),
+                        }),
+                        source: RouteSource::DefaultSsh,
+                        reason: format!("default target {:?}", t.match_pattern),
+                        confidence: 30,
+                    }));
+                }
+            }
+        }
         match request.config.ssh.as_ref() {
             Some(ssh) if ssh.enabled => Ok(Some(RouteCandidate {
                 target: DeliveryTarget::Ssh(SshTarget {
@@ -338,6 +365,7 @@ mod tests {
             remote_dir: Some("/srv/img".to_string()),
             local_dir: None,
             remember_password: Some(true),
+            is_default: false,
         }
     }
 
@@ -352,6 +380,7 @@ mod tests {
             remote_dir: None,
             local_dir: Some(dir.to_string()),
             remember_password: None,
+            is_default: false,
         }
     }
 
@@ -500,5 +529,24 @@ mod tests {
         let t = SshTarget { host: "h".into(), port: 2222, username: "bob".into(),
             remote_dir: "/r".into(), source_alias: None };
         assert_eq!(t.identity(), "bob@h:2222");
+    }
+
+    // 13. v0.4.0 (6-Q): a target flagged is_default wins over the legacy ssh struct.
+    #[test]
+    fn flagged_default_target_wins_over_legacy_ssh() {
+        let mut t = manual_ssh("flagged", "flag-host", true);
+        t.is_default = true;
+        let cfg = config(
+            vec![t],
+            Some(SshConfig { enabled: true, host: "legacy-host".to_string(), port: Some(22),
+                username: None, remote_dir: "/tmp".to_string(), match_pattern: None,
+                remember_password: true }),
+        );
+        let c = resolve(&fg(Some("anything")), &cfg, &[]);
+        assert_eq!(c.source, RouteSource::DefaultSsh);
+        match c.target {
+            DeliveryTarget::Ssh(s) => assert_eq!(s.host, "flag-host"),
+            _ => panic!("expected Ssh"),
+        }
     }
 }

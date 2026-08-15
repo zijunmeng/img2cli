@@ -29,6 +29,10 @@ pub struct TargetConfig {
     pub local_dir: Option<String>,
     #[serde(default)]
     pub remember_password: Option<bool>,
+    /// v0.4.0 (6-Q): this card is the default destination when no routing
+    /// rule matches. Exactly one card should carry the flag.
+    #[serde(default)]
+    pub is_default: bool,
 }
 
 /// The last confirmed capture selection in CSS pixels — preloaded on the
@@ -225,8 +229,34 @@ impl AppConfig {
         }
         let content = fs::read_to_string(path)
             .map_err(|e| format!("Failed to read config file: {}", e))?;
-        toml::from_str(&content)
-            .map_err(|e| format!("Failed to parse config file: {}", e))
+        let mut config: AppConfig =
+            toml::from_str(&content).map_err(|e| format!("Failed to parse config file: {}", e))?;
+        config.migrate();
+        Ok(config)
+    }
+
+    /// In-place migrations for older config files. v0.4.0 (6-Q): the default
+    /// host became a flag on a target card — pre-flag configs get the flag
+    /// seeded onto the target that matches the legacy `ssh` struct, so the
+    /// pinned-card removal doesn't change where uploads go.
+    fn migrate(&mut self) {
+        let needs_flag = self
+            .targets
+            .as_ref()
+            .map(|ts| !ts.iter().any(|t| t.is_default))
+            .unwrap_or(true);
+        if needs_flag {
+            if let (Some(targets), Some(ssh)) = (self.targets.as_mut(), self.ssh.as_ref()) {
+                if ssh.enabled && !ssh.host.is_empty() {
+                    if let Some(t) = targets
+                        .iter_mut()
+                        .find(|t| t.enabled && t.r#type == "ssh" && t.host.as_deref() == Some(ssh.host.as_str()))
+                    {
+                        t.is_default = true;
+                    }
+                }
+            }
+        }
     }
 
     pub fn save_to_path(&self, path: &Path) -> Result<(), String> {
