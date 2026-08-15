@@ -7,7 +7,7 @@ use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 use crate::daemon::{self, DaemonState};
 
 /// Instantly captures the primary monitor screenshot to memory *before* overlay loads.
-pub fn capture_full_screen(_app: &AppHandle, state: &DaemonState) -> Result<(), String> {
+pub fn capture_full_screen(app: &AppHandle, state: &DaemonState) -> Result<(), String> {
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     {
         let monitors = xcap::Monitor::all().map_err(|e| format!("List monitors failed: {e}"))?;
@@ -42,6 +42,26 @@ pub fn capture_full_screen(_app: &AppHandle, state: &DaemonState) -> Result<(), 
                 });
             }
         }
+        // xcap deliberately excludes windows owned by the current process
+        // (WebRTC-borrowed deadlock guard; verified xcap 0.5.2
+        // impl_window.rs), so our own Settings window never appears. We know
+        // our windows — append the main window's rect via Tauri APIs
+        // (Roadmap 6-M). No GetWindowText on own windows → no deadlock risk.
+        if let Some(win) = app.get_webview_window("main") {
+            let visible = win.is_visible().unwrap_or(false);
+            let minimized = win.is_minimized().unwrap_or(false);
+            if visible && !minimized {
+                if let (Ok(pos), Ok(size)) = (win.outer_position(), win.outer_size()) {
+                    rects.push(daemon::WindowRect {
+                        x: (pos.x as f32 / scale) as i32,
+                        y: (pos.y as f32 / scale) as i32,
+                        w: (size.width as f32 / scale) as i32,
+                        h: (size.height as f32 / scale) as i32,
+                        title: "img2cli".to_string(),
+                    });
+                }
+            }
+        }
         if let Ok(mut lock) = state.window_rects.lock() {
             *lock = rects;
         }
@@ -49,7 +69,7 @@ pub fn capture_full_screen(_app: &AppHandle, state: &DaemonState) -> Result<(), 
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
-        let _ = (_app, state);
+        let _ = (app, state);
         Err("Screenshot capture is not supported on this platform".to_string())
     }
 }
@@ -191,11 +211,11 @@ pub fn capture_region(
                 hotkey
             ),
             crate::config::InjectionMode::Auto => format!(
-                "Screenshot captured. Switch to your AI CLI and press {} to upload (pastes automatically where supported; otherwise Ctrl+V).",
+                "Screenshot captured. Ctrl+V pastes the image directly; press {} to upload + paste the path.",
                 hotkey
             ),
             crate::config::InjectionMode::Direct => format!(
-                "Screenshot captured. Switch to your AI CLI and press {} to upload + paste.",
+                "Screenshot captured. Ctrl+V pastes the image directly; press {} to upload + paste the path.",
                 hotkey
             ),
         };
