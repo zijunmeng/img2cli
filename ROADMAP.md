@@ -157,6 +157,11 @@ This file tracks future architecture improvements, user experience features, and
 ### K. ~~UI Font Customization~~ — DROPPED (2026-08-15, by decision)
 * Removed from scope; not planned. (Reference screenshot kept at `docs/design-ref/snipaste-general-font.png`.)
 
+### M. Own-Window Detection (v0.3.13 follow-up)
+* **Defect** (reported 2026-08-16, v0.3.13): auto window detection never highlights img2cli's own Settings window — the frozen frame shows it, but hovering yields no outline.
+* **Root cause (verified in xcap 0.5.2 source, `src/windows/impl_window.rs::is_valid_window`)**: xcap's Windows enumeration skips ALL windows owned by the current process (`lp_dw_process_id == GetCurrentProcessId() → false`), a defensive rule borrowed from WebRTC desktop-capture (GetWindowText on own-process windows can deadlock the message loop). The capture overlay itself is additionally excluded by our empty-title filter — only the overlay is intentional.
+* **Fix sketch**: don't fight xcap — we know our own windows. In `capture_full_screen`, append the main window's rect via Tauri APIs (`app.get_webview_window("main")` → `is_visible()` + `outer_position()` + `outer_size()`, physical ÷ scale → CSS px) into `window_rects`. No Win32, no deadlock surface.
+
 ### L. Capture Options Settings Tab (Snipaste-style)
 * **Reference**: [`docs/design-ref/snipaste-capture-options.png`](docs/design-ref/snipaste-capture-options.png) + [`docs/design-ref/snipaste-capture-appearance.png`](docs/design-ref/snipaste-capture-appearance.png). Snipaste's 截屏选项 exposes: 自动检测窗口 / 自动检测界面元素 / 捕捉鼠标指针 / 截屏时其他窗口激活自动退出 / 历史截屏区域数(8)+循环 / 历史记录数(20) / 音效文件 / 边框宽度(3px) / 遮罩颜色 / 显示锚点+锚点描边颜色 / 放大镜显示内容(遮罩/边框/锚点) / 全屏十字线 / 辅助线 / 显示快捷键提示 / 恢复默认.
 * **Gap**: img2cli's capture overlay has no user-tunable options.
