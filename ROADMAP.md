@@ -157,6 +157,13 @@ This file tracks future architecture improvements, user experience features, and
 ### K. ~~UI Font Customization~~ — DROPPED (2026-08-15, by decision)
 * Removed from scope; not planned. (Reference screenshot kept at `docs/design-ref/snipaste-general-font.png`.)
 
+### N. Merge Default-Host Form into the Card List (v0.3.13 follow-up)
+* **Issue** (reported 2026-08-16): the Hosts & Targets page has two host-editing surfaces — the top "default host" form (`config.ssh`) and the Dynamic Router Targets card list. The form is load-bearing (DefaultSsh fallback route — most uploads actually go through it; the keyring password lives on it; "Set Default" copies into it) but duplicative UI.
+* **Action**:
+  1. Render `config.ssh` as the pinned first card of the list (默认 badge + pin icon); edit it through the same Add/Edit modal as targets.
+  2. Backend `config.ssh` stays the storage/routing structure (zero routing/upload changes); "Set Default" becomes swapping a card into the default slot.
+  3. Frontend-only refactor of the Hosts tab + a small setAsDefault adjustment.
+
 ### M. Own-Window Detection (v0.3.13 follow-up)
 * **Defect** (reported 2026-08-16, v0.3.13): auto window detection never highlights img2cli's own Settings window — the frozen frame shows it, but hovering yields no outline.
 * **Root cause (verified in xcap 0.5.2 source, `src/windows/impl_window.rs::is_valid_window`)**: xcap's Windows enumeration skips ALL windows owned by the current process (`lp_dw_process_id == GetCurrentProcessId() → false`), a defensive rule borrowed from WebRTC desktop-capture (GetWindowText on own-process windows can deadlock the message loop). The capture overlay itself is additionally excluded by our empty-title filter — only the overlay is intentional.
