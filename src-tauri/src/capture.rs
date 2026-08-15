@@ -28,8 +28,9 @@ pub fn capture_full_screen(app: &AppHandle, state: &DaemonState) -> Result<(), S
         // handled inside xcap.
         let scale = mon.scale_factor().unwrap_or(1.0);
         let mon_id = mon.id().ok();
-        let mon_w = mon.width() as i32;
-        let mon_h = mon.height() as i32;
+        // width()/height() return XCapResult<u32>; on failure, skip clamping.
+        let mon_w = mon.width().unwrap_or(u32::MAX) as i32;
+        let mon_h = mon.height().unwrap_or(u32::MAX) as i32;
         let mut rects = Vec::new();
         if let Ok(windows) = xcap::Window::all() {
             for w in windows {
