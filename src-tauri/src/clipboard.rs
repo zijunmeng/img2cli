@@ -5,6 +5,15 @@ use std::fs::File;
 use std::io::Cursor;
 use std::path::Path;
 
+/// Peek the clipboard image without saving anything — used by the inject
+/// fast path (v0.3.15) to fingerprint whether it matches the last background
+/// upload. Returns None when the clipboard has no image.
+pub fn peek_clipboard_image() -> Option<(u32, u32, Vec<u8>)> {
+    let mut clipboard = Clipboard::new().ok()?;
+    let img = clipboard.get_image().ok()?;
+    Some((img.width as u32, img.height as u32, img.bytes.into_owned()))
+}
+
 pub fn capture_and_save_image(config: &AppConfig, dest_path: &Path) -> Result<String, String> {
     // 1. Initialize clipboard
     let mut clipboard = Clipboard::new().map_err(|e| format!("Failed to open clipboard: {}", e))?;

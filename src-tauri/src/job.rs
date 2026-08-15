@@ -21,7 +21,7 @@ use std::sync::mpsc::{self, Receiver, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::config::{AppConfig, InjectionMode};
 use crate::daemon::{log_message, CapturedArtifact};
@@ -105,6 +105,9 @@ pub struct TransferJob {
     pub app_handle: AppHandle,
     pub log_history: Arc<Mutex<Vec<String>>>,
     pub created_at: std::time::SystemTime,
+    /// v0.3.15: false = upload-only background job (capture-then-upload);
+    /// true = the full pipeline ending in injection (the inject hotkey).
+    pub inject: bool,
 }
 
 impl TransferJob {
@@ -113,6 +116,7 @@ impl TransferJob {
         config: AppConfig,
         app_handle: AppHandle,
         log_history: Arc<Mutex<Vec<String>>>,
+        inject: bool,
     ) -> Self {
         Self {
             id: next_job_id(),
@@ -122,6 +126,7 @@ impl TransferJob {
             app_handle,
             log_history,
             created_at: std::time::SystemTime::now(),
+            inject,
         }
     }
 
@@ -277,6 +282,41 @@ fn worker_loop(rx: Receiver<TransferJob>) {
 fn process_job(job: &mut TransferJob) -> Result<JobCompletion, AppError> {
     job.set_state(JobState::Processing);
 
+    // v0.3.15 inject fast path: if the clipboard still holds the exact image
+    // the background upload already shipped (capture-then-upload), skip
+    // capture/upload entirely and inject the stored path.
+    if job.inject
+        && job.artifact.is_none()
+        && job.config.output_format.to_lowercase() != "base64"
+    {
+        if let Some(state) = job.app_handle.try_state::<crate::daemon::DaemonState>() {
+            let last = state.last_upload.lock().ok().and_then(|g| g.as_ref().cloned());
+            if let Some(last) = last {
+                if let Some((w, h, bytes)) = crate::clipboard::peek_clipboard_image() {
+                    if crate::daemon::image_fingerprint(w, h, &bytes) == last.fingerprint {
+                        job.log("Already uploaded in the background — injecting the stored path.");
+                        let paste_text = wrap_quotes(
+                            crate::cli_adapter::adapter_for(&job.config.output_format)
+                                .render(&last.delivered_path),
+                            job.config.wrap_single_quotes,
+                        );
+                        job.set_state(JobState::Injecting);
+                        let inject_window = crate::daemon::get_active_window_title();
+                        let effective_mode = resolve_effective_mode(job, &inject_window);
+                        job.log(&format!(
+                            "[{}] {} | target: {:?}",
+                            effective_mode.as_str(),
+                            paste_text,
+                            inject_window
+                        ));
+                        let outcome = inject_with_fallback(job, &paste_text, effective_mode)?;
+                        return Ok(JobCompletion { paste_text, injection: outcome });
+                    }
+                }
+            }
+        }
+    }
+
     // 1. Temp filename + local dir
     let filename = format!("img_{}.jpg", chrono::Local::now().format("%Y%m%d_%H%M%S_%f"));
     let local_dir = match job.config.save_dir.clone() {
@@ -368,6 +408,37 @@ fn process_job(job: &mut TransferJob) -> Result<JobCompletion, AppError> {
         }
     };
     job.log(&format!("Delivered: {}", delivered.delivered_path));
+
+    // v0.3.15 upload-only job (capture-then-upload): record the upload for
+    // the inject fast path and stop — injection happens when the user presses
+    // the inject hotkey with the target window focused.
+    if !job.inject {
+        if let Some(ref art) = job.artifact {
+            let fp = crate::daemon::image_fingerprint(
+                art.image.width(),
+                art.image.height(),
+                art.image.as_raw(),
+            );
+            if let Some(state) = job.app_handle.try_state::<crate::daemon::DaemonState>() {
+                if let Ok(mut slot) = state.last_upload.lock() {
+                    *slot = Some(crate::daemon::LastUpload {
+                        fingerprint: fp,
+                        delivered_path: delivered.delivered_path.clone(),
+                    });
+                }
+            }
+        }
+        job.log(&format!(
+            "Background upload ready — press the inject hotkey to paste: {}",
+            delivered.delivered_path
+        ));
+        let paste_text = wrap_quotes(
+            crate::cli_adapter::adapter_for(&job.config.output_format)
+                .render(&delivered.delivered_path),
+            job.config.wrap_single_quotes,
+        );
+        return Ok(JobCompletion { paste_text, injection: InjectionOutcome::Injected });
+    }
     // The paste-text CONTENT is always decided by output_format (+ optional
     // quote wrap). injection_mode only controls HOW it's delivered
     // (direct/copy — resolved per host by host_policy), never the text itself.

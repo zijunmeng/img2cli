@@ -169,6 +169,9 @@ pub fn capture_region(
             .min(full.height().saturating_sub(cy));
             
         let cropped = image::imageops::crop_imm(&full, cx, cy, cw, ch).to_image();
+        // v0.3.15 capture-then-upload: keep a copy for the background upload
+        // job (the clipboard takes ownership of the original buffer below).
+        let for_upload = cropped.clone();
 
         // v0.3.7: Alt+Z now captures ONLY — it puts the image in the clipboard
         // and stops. The screenshot subject and the AI CLI are rarely on screen
@@ -199,6 +202,10 @@ pub fn capture_region(
             });
             let _ = cfg.save();
         }
+
+        // v0.3.15 "capture = upload": ship the region to the server in the
+        // background right away; the inject hotkey pastes the path instantly.
+        daemon::trigger_upload_only(&app_handle, &state, for_upload);
         // Dynamic hint: use the configured hotkey + injection mode (spec §11.3)
         let (hotkey, mode) = if let Ok(cfg) = state.config.read() {
             (cfg.global_hotkey.clone(), cfg.injection_mode)
@@ -207,15 +214,11 @@ pub fn capture_region(
         };
         let hint = match mode {
             crate::config::InjectionMode::Copy => format!(
-                "Screenshot captured. Switch to your AI CLI, press {} to upload, then Ctrl+V.",
+                "Screenshot captured. Uploading in the background — press {} to copy the path, then Ctrl+V.",
                 hotkey
             ),
-            crate::config::InjectionMode::Auto => format!(
-                "Screenshot captured. Ctrl+V pastes the image directly; press {} to upload + paste the path.",
-                hotkey
-            ),
-            crate::config::InjectionMode::Direct => format!(
-                "Screenshot captured. Ctrl+V pastes the image directly; press {} to upload + paste the path.",
+            _ => format!(
+                "Screenshot captured. Uploading in the background — Ctrl+V pastes the image, or press {} to paste its path.",
                 hotkey
             ),
         };

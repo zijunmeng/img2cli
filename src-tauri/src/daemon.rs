@@ -46,6 +46,27 @@ pub struct DaemonState {
     /// On-screen window rects (CSS px) captured alongside the frozen frame —
     /// feeds the overlay's auto window detection (Roadmap 6-J).
     pub window_rects: Arc<std::sync::Mutex<Vec<WindowRect>>>,
+    /// Most recent background upload (v0.3.15 capture-then-upload): lets the
+    /// inject hotkey skip re-uploading when the clipboard still holds the
+    /// exact image that was already uploaded.
+    pub last_upload: Arc<std::sync::Mutex<Option<LastUpload>>>,
+}
+
+/// A completed background upload, keyed by the fingerprint of the raw image.
+#[derive(Debug, Clone)]
+pub struct LastUpload {
+    pub fingerprint: u64,
+    pub delivered_path: String,
+}
+
+/// Stable fingerprint of raw RGBA pixels — the same buffer hashes identically
+/// on the upload side (capture artifact) and the inject side (clipboard peek).
+pub fn image_fingerprint(width: u32, height: u32, bytes: &[u8]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    (width, height).hash(&mut h);
+    bytes.hash(&mut h);
+    h.finish()
 }
 
 /// A detected on-screen window rectangle in CSS pixels.
@@ -156,6 +177,7 @@ pub fn start_daemon(app_handle: AppHandle, config: AppConfig) -> DaemonState {
         config: config_lock,
         captured_image: Arc::new(std::sync::Mutex::new(None)),
         window_rects: Arc::new(std::sync::Mutex::new(Vec::new())),
+        last_upload: Arc::new(std::sync::Mutex::new(None)),
     }
 }
 
@@ -298,6 +320,43 @@ pub fn upload_via_scp(
 
 /// Hotkey entry point (Alt+V): read the clipboard. Thin wrapper around
 /// `trigger_with_artifact`.
+/// Enqueue a background upload-only job (v0.3.15 "capture = upload"): called
+/// right after a confirmed region lands on the clipboard, so the SFTP upload
+/// overlaps with the user switching windows. The inject hotkey then pastes
+/// the already-uploaded path instantly (fingerprint-matched fast path).
+pub fn trigger_upload_only(app_handle: &AppHandle, state: &DaemonState, image: image::RgbaImage) {
+    let config = if let Ok(config) = state.config.read() {
+        config.clone()
+    } else {
+        return;
+    };
+    // Inline base64 never uploads; nothing to do in the background.
+    if config.output_format.to_lowercase() == "base64" {
+        return;
+    }
+    log_message(app_handle, &state.log_history, "Uploading in the background…");
+    let artifact = CapturedArtifact::new(image, CaptureSource::Region);
+    let job = crate::job::TransferJob::new(
+        Some(artifact),
+        config,
+        app_handle.clone(),
+        state.log_history.clone(),
+        false,
+    );
+    let id = job.id;
+    let _ = app_handle.emit("job_event", crate::job::JobEvent::Created { id });
+    if let Err(e) = crate::job::job_manager().submit(job) {
+        log_message(
+            app_handle,
+            &state.log_history,
+            &format!(
+                "Background upload not queued ({}). It will upload when you inject instead.",
+                e
+            ),
+        );
+    }
+}
+
 pub fn trigger_capture_and_paste(app_handle: &AppHandle, state: &DaemonState) {
     trigger_with_artifact(app_handle, state, None);
 }
@@ -328,6 +387,7 @@ pub fn trigger_with_artifact(
         config,
         app_handle.clone(),
         state.log_history.clone(),
+        true,
     );
     let id = job.id;
 
