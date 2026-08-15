@@ -3,10 +3,13 @@
   <div v-if="captureMode" class="fixed inset-0 z-[9999] cursor-crosshair select-none"
        @mousedown="capMouseDown" @mousemove="capMouseMove" @mouseup="capMouseUp">
     <img v-if="capturedImageSrc" :src="capturedImageSrc" class="absolute inset-0 w-full h-full object-cover pointer-events-none" />
-    <div v-if="!hasRect" class="absolute top-5 left-1/2 -translate-x-1/2 text-white text-sm bg-black/70 px-4 py-1.5 rounded-full pointer-events-none shadow-lg z-[10000]">{{ t('Drag to select · Enter to save · Esc to cancel') }}</div>
-    <div v-if="hasRect" :style="rectStyle" @mousedown.stop="startMove"
-         class="absolute border border-[#2997ff] box-border cursor-move z-[10000]"
-         style="box-shadow: 0 0 0 9999px rgba(0,0,0,0.45)">
+    <div v-if="!hasRect && config.capture_show_hints" class="absolute top-5 left-1/2 -translate-x-1/2 text-white text-sm bg-black/70 px-4 py-1.5 rounded-full pointer-events-none shadow-lg z-[10000]">{{ t('Drag to select · Click a window to snap · Enter to save · Esc to cancel') }}</div>
+    <!-- Auto-detected window under the cursor (6-J): outline + size label -->
+    <div v-if="hoverRect && !hasRect" :style="hoverStyle" class="absolute pointer-events-none z-[10000]">
+      <span class="absolute -top-6 left-0 bg-[#2997ff] text-white text-[11px] px-1.5 py-0.5 rounded-md font-mono whitespace-nowrap shadow-lg">{{ Math.round(hoverRect.w) }} × {{ Math.round(hoverRect.h) }}</span>
+    </div>
+    <div v-if="hasRect" :style="[rectStyle, selBorderStyle]" @mousedown.stop="startMove"
+         class="absolute border-solid border-[#2997ff] box-border cursor-move z-[10000]">
       <div v-for="hd in handles" :key="hd" :style="handleStyle(hd)" :class="handleCursorClass(hd)"
            @mousedown.stop.prevent="startResize(hd, $event)"
            class="absolute w-2.5 h-2.5 bg-white border border-[#2997ff] rounded-sm shadow"></div>
@@ -235,6 +238,54 @@
             </div>
           </div>
 
+          <!-- Capture Options (6-J / 6-L) -->
+          <div class="bg-[var(--bg-card)] border border-[var(--color-border)] rounded-2xl p-6 space-y-4 shadow-[0_8px_32px_rgba(0,0,0,0.37)]">
+            <h3 class="text-sm font-semibold uppercase text-[var(--color-text-secondary)] tracking-wider">{{ t('Capture Options') }}</h3>
+            <div class="flex items-center justify-between py-1">
+              <div>
+                <span class="block text-sm font-medium text-[var(--color-text-primary)]">{{ t('Auto-detect windows') }}</span>
+                <span class="block text-xs text-[var(--color-text-secondary)]">{{ t('Click to snap the window under the cursor') }}</span>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" v-model="config.capture_auto_detect" class="sr-only peer" />
+                <div class="w-11 h-6 bg-[var(--bg-toggle)] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-[var(--color-toggle-knob)] after:border-[var(--color-toggle-knob)] after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--color-accent)]"></div>
+              </label>
+            </div>
+            <div class="flex items-center justify-between py-1">
+              <div>
+                <span class="block text-sm font-medium text-[var(--color-text-primary)]">{{ t('Remember last selection') }}</span>
+                <span class="block text-xs text-[var(--color-text-secondary)]">{{ t('Preload the previous region on the next capture') }}</span>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" v-model="config.capture_remember_region" class="sr-only peer" />
+                <div class="w-11 h-6 bg-[var(--bg-toggle)] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-[var(--color-toggle-knob)] after:border-[var(--color-toggle-knob)] after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--color-accent)]"></div>
+              </label>
+            </div>
+            <div class="flex items-center justify-between py-1">
+              <div>
+                <span class="block text-sm font-medium text-[var(--color-text-primary)]">{{ t('Show capture hints') }}</span>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" v-model="config.capture_show_hints" class="sr-only peer" />
+                <div class="w-11 h-6 bg-[var(--bg-toggle)] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-[var(--color-toggle-knob)] after:border-[var(--color-toggle-knob)] after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--color-accent)]"></div>
+              </label>
+            </div>
+            <div>
+              <div class="flex justify-between text-xs font-semibold text-[var(--color-text-secondary)] mb-1">
+                <span>{{ t('Selection border width (px)') }}</span>
+                <span class="text-[var(--color-accent)]">{{ config.capture_border_width }}</span>
+              </div>
+              <input type="range" min="1" max="6" v-model.number="config.capture_border_width" class="w-full accent-[var(--color-accent)] bg-[var(--bg-input)]" />
+            </div>
+            <div>
+              <div class="flex justify-between text-xs font-semibold text-[var(--color-text-secondary)] mb-1">
+                <span>{{ t('Mask opacity (%)') }}</span>
+                <span class="text-[var(--color-accent)]">{{ config.capture_mask_opacity }}%</span>
+              </div>
+              <input type="range" min="0" max="90" v-model.number="config.capture_mask_opacity" class="w-full accent-[var(--color-accent)] bg-[var(--bg-input)]" />
+            </div>
+          </div>
+
           <div class="flex justify-end pt-2">
             <button @click="saveSettings" class="flex items-center gap-2 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white px-6 py-2.5 rounded-full font-semibold shadow-sm shadow-[var(--color-accent)]/15 active:scale-[0.98] transition-all duration-150 text-sm">
               {{ t('Save Settings') }}
@@ -335,49 +386,46 @@
               </div>
             </div>
 
-            <!-- Targets Table -->
-            <div>
-              <table class="w-full text-left border-collapse">
-                <thead>
-                  <tr class="border-b border-[var(--color-input-border)] text-xs font-semibold text-[var(--color-text-secondary)]">
-                    <th class="w-16 py-3 px-4 text-center">{{ t('Status') }}</th>
-                    <th class="w-40 py-3 px-4 text-left">{{ t('Host Name / Alias') }}</th>
-                    <th class="w-24 py-3 px-4 text-center">{{ t('Type') }}</th>
-                    <th class="py-3 px-4 text-left">{{ t('Details') }}</th>
-                    <th class="w-56 py-3 px-4 text-center">{{ t('Actions') }}</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-[var(--color-border)] text-sm">
-                  <tr v-for="(target, idx) in (config.targets || [])" :key="idx" class="hover:bg-[var(--color-text-primary)]/[0.04]">
-                    <td class="py-3 px-4 text-center">
-                      <label class="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" v-model="target.enabled" class="sr-only peer" />
-                        <div class="w-9 h-5 bg-[var(--bg-toggle)] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-[var(--color-toggle-knob)] after:border-[var(--color-toggle-knob)] after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--color-accent)]"></div>
-                      </label>
-                    </td>
-                    <td class="py-3 px-4 font-semibold text-[var(--color-text-primary)] max-w-[10rem] truncate">{{ target.match_pattern }}</td>
-                    <td class="py-3 px-4 text-center">
-                      <span :class="['px-2 py-0.5 rounded-md text-xs font-semibold uppercase', target.type === 'ssh' ? 'bg-[var(--color-accent)]/10 text-[var(--color-accent)] border border-[var(--color-accent)]/25' : 'bg-[var(--color-text-secondary)]/10 text-[var(--color-text-secondary)] border border-[var(--color-text-secondary)]/25']">
-                        {{ target.type }}
-                      </span>
-                    </td>
-                    <td class="py-3 px-4 text-xs text-[var(--color-text-secondary)] max-w-[28rem] truncate">
-                      <span v-if="target.type === 'ssh'" class="block truncate" :title="`${target.username}@${target.host}:${target.remote_dir}`">{{ target.username }}@{{ target.host }}:{{ target.remote_dir }}</span>
-                      <span v-else class="block truncate" :title="target.local_dir">{{ target.local_dir }}</span>
-                    </td>
-                    <td class="py-3 px-4 text-center">
-                      <div class="flex items-center justify-center gap-1.5">
-                        <button v-if="target.type === 'ssh'" @click="setAsDefault(idx)" class="px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-[var(--color-accent)]/10 text-[var(--color-accent)] border border-[var(--color-accent)]/25 hover:bg-[var(--color-accent)]/20 transition-colors">{{ t('Set Default') }}</button>
-                        <button @click="editTarget(idx)" class="px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-[var(--color-text-secondary)]/10 text-[var(--color-text-secondary)] border border-[var(--color-text-secondary)]/25 hover:bg-[var(--color-text-secondary)]/20 transition-colors">{{ t('Edit') }}</button>
-                        <button @click="deleteTarget(idx)" class="px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-red-500/10 text-red-400 border border-red-500/25 hover:bg-red-500/20 transition-colors">{{ t('Delete') }}</button>
-                      </div>
-                    </td>
-                  </tr>
-                  <tr v-if="!(config.targets || []).length">
-                    <td colspan="5" class="py-6 text-center text-[var(--color-text-secondary)] text-xs">{{ t('No routing targets configured. Clipboard uploads will fallback to default host.') }}</td>
-                  </tr>
-                </tbody>
-              </table>
+            <!-- Target cards (Orca-style, Milestone 6-H) -->
+            <div class="space-y-3">
+              <div v-for="(target, idx) in (config.targets || [])" :key="target.match_pattern || idx"
+                   class="rounded-xl border border-[var(--color-border)] bg-[var(--bg-input)]/40 px-4 py-3 flex items-center gap-3 hover:border-[var(--color-accent)]/40 transition-colors">
+                <span class="w-2.5 h-2.5 rounded-full shrink-0"
+                      :class="{
+                        'bg-emerald-400': targetTest[target.match_pattern] === 'ok' && target.enabled,
+                        'bg-red-400': targetTest[target.match_pattern] === 'fail',
+                        'bg-amber-400 animate-pulse': targetTest[target.match_pattern] === 'testing',
+                        'bg-[var(--color-text-secondary)]/40': !target.enabled || !targetTest[target.match_pattern],
+                      }"
+                      :title="targetTestTitle(target)"></span>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-sm font-semibold text-[var(--color-text-primary)] truncate">{{ target.match_pattern }}</span>
+                    <span v-if="target.type === 'ssh'" class="px-1.5 py-0.5 rounded-md text-[10px] font-semibold uppercase bg-[var(--color-accent)]/10 text-[var(--color-accent)] border border-[var(--color-accent)]/25">SSH</span>
+                    <span v-else class="px-1.5 py-0.5 rounded-md text-[10px] font-semibold uppercase bg-[var(--color-text-secondary)]/10 text-[var(--color-text-secondary)] border border-[var(--color-text-secondary)]/25">{{ t('Local') }}</span>
+                    <span v-if="isDefaultTarget(idx)" class="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">{{ t('Default') }}</span>
+                  </div>
+                  <div class="text-xs text-[var(--color-text-secondary)] font-mono truncate mt-0.5">
+                    <template v-if="target.type === 'ssh'">{{ target.username }}@{{ target.host }}:{{ target.port || 22 }} → {{ target.remote_dir }}</template>
+                    <template v-else>{{ target.local_dir }}</template>
+                  </div>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input type="checkbox" v-model="target.enabled" class="sr-only peer" />
+                  <div class="w-9 h-5 bg-[var(--bg-toggle)] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-[var(--color-toggle-knob)] after:border-[var(--color-toggle-knob)] after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--color-accent)]"></div>
+                </label>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <button v-if="target.type === 'ssh'" @click="testTargetCard(target)" :disabled="targetTest[target.match_pattern] === 'testing'"
+                          class="px-2 py-1 rounded-lg text-[11px] font-semibold bg-[var(--bg-button)] hover:bg-[var(--bg-button-hover)] text-[var(--color-text-primary)] disabled:opacity-50 transition-colors">{{ targetTest[target.match_pattern] === 'testing' ? t('Testing...') : t('Test') }}</button>
+                  <button v-if="target.type === 'ssh'" @click="setAsDefault(idx)"
+                          class="px-2 py-1 rounded-lg text-[11px] font-semibold bg-[var(--color-accent)]/10 text-[var(--color-accent)] border border-[var(--color-accent)]/25 hover:bg-[var(--color-accent)]/20 transition-colors">{{ t('Set Default') }}</button>
+                  <button @click="editTarget(idx)"
+                          class="px-2 py-1 rounded-lg text-[11px] font-semibold bg-[var(--color-text-secondary)]/10 text-[var(--color-text-secondary)] border border-[var(--color-text-secondary)]/25 hover:bg-[var(--color-text-secondary)]/20 transition-colors">{{ t('Edit') }}</button>
+                  <button @click="deleteTarget(idx)"
+                          class="px-2 py-1 rounded-lg text-[11px] font-semibold bg-red-500/10 text-red-400 border border-red-500/25 hover:bg-red-500/20 transition-colors">{{ t('Delete') }}</button>
+                </div>
+              </div>
+              <div v-if="!(config.targets || []).length" class="text-center py-6 text-[var(--color-text-secondary)] text-xs">{{ t('No routing targets configured. Clipboard uploads will fallback to default host.') }}</div>
             </div>
           </div>
 
@@ -579,6 +627,12 @@ const config = ref({
   clean_keep_days: 1,
   theme: 'dracula',
   language: 'zh-CN',
+  capture_auto_detect: true,
+  capture_remember_region: true,
+  capture_show_hints: true,
+  capture_border_width: 2,
+  capture_mask_opacity: 45,
+  last_capture_rect: null,
   ssh: {
     enabled: false,
     host: '',
@@ -1090,7 +1144,46 @@ const handleCursorClass = (hd) => ({
 }[hd]);
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
+// Auto window detection (6-J): rects from get_window_rects; while idle (no
+// selection being drawn) hit-test the cursor, smallest containing window wins.
+const winRects = ref([]);
+const hoverRect = ref(null);
+const hitTest = (mx, my) => {
+  let best = null;
+  let bestArea = Infinity;
+  for (const r of winRects.value) {
+    if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
+      const area = r.w * r.h;
+      if (area < bestArea) { best = r; bestArea = area; }
+    }
+  }
+  return best;
+};
+const hoverStyle = computed(() => {
+  const r = hoverRect.value;
+  if (!r) return {};
+  return {
+    left: r.x + 'px', top: r.y + 'px', width: r.w + 'px', height: r.h + 'px',
+    border: ((config.value.capture_border_width || 2) + 1) + 'px solid #2997ff',
+  };
+});
+// Selection appearance knobs (6-L).
+const selBorderStyle = computed(() => ({
+  borderWidth: (config.value.capture_border_width || 2) + 'px',
+  borderStyle: 'solid',
+  borderColor: '#2997ff',
+  boxShadow: `0 0 0 9999px rgba(0,0,0,${(config.value.capture_mask_opacity ?? 45) / 100})`,
+}));
+
 const capMouseDown = (e) => {
+  // Click-to-snap (6-J): if a detected window is under the cursor, adopt its
+  // rect as the selection and enter the adjustable editor instead of drawing.
+  if (hoverRect.value) {
+    const r = hoverRect.value;
+    rect.value = { x: r.x, y: r.y, w: r.w, h: r.h };
+    hoverRect.value = null;
+    return;
+  }
   // Fires only for clicks OUTSIDE the selection rect (inside-rect clicks are
   // caught by the rect's @mousedown.stop) → start drawing a fresh selection.
   capAction.value = 'draw';
@@ -1107,7 +1200,10 @@ const startResize = (hd, e) => {
   capOrigin.value = { mx: e.clientX, my: e.clientY, rect: { ...rect.value } };
 };
 const capMouseMove = (e) => {
-  if (!capAction.value) return;
+  if (!capAction.value) {
+    hoverRect.value = (!hasRect.value && winRects.value.length) ? hitTest(e.clientX, e.clientY) : null;
+    return;
+  }
   const mx = e.clientX, my = e.clientY;
   const winW = window.innerWidth, winH = window.innerHeight;
   if (capAction.value === 'draw') {
@@ -1184,6 +1280,29 @@ const editTarget = async (index) => {
 const deleteTarget = (index) => {
   config.value.targets.splice(index, 1);
   showToast(t('Target deleted.'));
+};
+
+// Per-target connection test state (6-H), keyed by match_pattern so it stays
+// attached to the right card across deletes. 'testing' | 'ok' | 'fail'.
+const targetTest = ref({});
+const testTargetCard = async (tg) => {
+  if (!tg || tg.type !== 'ssh' || targetTest.value[tg.match_pattern] === 'testing') return;
+  targetTest.value = { ...targetTest.value, [tg.match_pattern]: 'testing' };
+  try {
+    await invoke('test_connection', { host: tg.host, port: tg.port || null, username: tg.username || null, password: null });
+    targetTest.value = { ...targetTest.value, [tg.match_pattern]: 'ok' };
+  } catch (_) {
+    targetTest.value = { ...targetTest.value, [tg.match_pattern]: 'fail' };
+  }
+};
+const targetTestTitle = (tg) => ({
+  ok: t('Connected'), fail: t('Connection failed:'), testing: t('Testing...'),
+}[targetTest.value[tg.match_pattern]] || '');
+// A target is the default when it matches the enabled default SSH host.
+const isDefaultTarget = (idx) => {
+  const tg = config.value.targets[idx];
+  const d = config.value.ssh;
+  return !!(tg && tg.type === 'ssh' && d && d.enabled && d.host && tg.host === d.host);
 };
 
 // Save Custom Target (add or edit)
@@ -1298,6 +1417,28 @@ onMounted(() => {
     invoke('get_captured_image')
       .then(async (src) => {
         capturedImageSrc.value = src;
+        // Capture options + auto window detection + last-region preload
+        // (6-J/6-L), fetched before the reveal so nothing pops in.
+        try {
+          const cfg = await invoke('get_config');
+          ['capture_auto_detect', 'capture_remember_region', 'capture_show_hints',
+            'capture_border_width', 'capture_mask_opacity', 'last_capture_rect'].forEach((k) => {
+            if (cfg[k] !== undefined) config.value[k] = cfg[k];
+          });
+          if (cfg.capture_auto_detect) winRects.value = await invoke('get_window_rects');
+          if (cfg.capture_remember_region && cfg.last_capture_rect) {
+            const r = cfg.last_capture_rect;
+            if (r.w >= 4 && r.h >= 4 && r.x < window.innerWidth && r.y < window.innerHeight) {
+              const px = Math.max(0, r.x);
+              const py = Math.max(0, r.y);
+              rect.value = {
+                x: px, y: py,
+                w: Math.max(4, Math.min(r.w, window.innerWidth - px)),
+                h: Math.max(4, Math.min(r.h, window.innerHeight - py)),
+              };
+            }
+          }
+        } catch (_) {}
         // The overlay window was built hidden (capture.rs visible:false)) so the
         // WebView's initial white frame never shows. Reveal it only after the
         // frozen frame has rendered → flash-free, Snipaste-style.

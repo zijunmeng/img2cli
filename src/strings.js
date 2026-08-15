@@ -128,6 +128,22 @@ export const ZH = {
   'duplicate(s) skipped': '个重复项已跳过',
   'set as the default SSH host.': '已设为默认 SSH 主机。',
   'Saved target, but password not stored:': '目标已保存，但密码未存储：',
+  // ── capture options + overlay (6-J/6-L) ──
+  'Drag to select · Click a window to snap · Enter to save · Esc to cancel':
+    '拖拽选择 · 点击选中窗口 · Enter 保存 · Esc 取消',
+  'Capture Options': '截屏选项',
+  'Auto-detect windows': '自动识别窗口',
+  'Click to snap the window under the cursor': '点击即可选中光标所在窗口',
+  'Remember last selection': '记住上次选区',
+  'Preload the previous region on the next capture': '下次截图预载上次选区，适合重复截同一区域',
+  'Show capture hints': '显示截图提示',
+  'Selection border width (px)': '选区边框宽度（像素）',
+  'Mask opacity (%)': '遮罩浓度（%）',
+  // ── hosts cards (6-H) ──
+  Test: '测试',
+  Local: '本地',
+  Default: '默认',
+  Connected: '已连通',
 };
 
 // Chinese display names for the theme selector.
