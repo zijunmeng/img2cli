@@ -86,7 +86,7 @@ This file tracks future architecture improvements, user experience features, and
 ## 7. Milestone 6: UX Simplification Batch (Short-Term, v0.3.12 candidate)
 
 > Recorded 2026-08-14 after real-world v0.3.11 testing on Orca; items E–L added 2026-08-15.
-> **Status: A–I shipped in v0.3.12; H, J, and the L core (auto-detect toggle, last-region memory, appearance knobs) shipped in v0.3.13 (2026-08-16). K dropped by decision. L remainder (cursor capture, focus-loss exit, sound, magnifier/crosshair/guides) still deferred.**
+> **Status: A–I shipped in v0.3.12; H, J, and the L core shipped in v0.3.13; M, N, O + dual-path hints shipped in v0.3.14 (2026-08-16). K dropped by decision. L remainder (cursor capture, focus-loss exit, sound, magnifier/crosshair/guides) still deferred → Milestone 3/4 (annotation + pinning) next.**
 
 ### A. Main Window Free Resizing
 * **Defect**: The Settings window is locked at 800×600 and cannot be resized.

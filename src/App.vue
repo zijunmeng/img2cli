@@ -568,7 +568,7 @@ import { ZH, THEME_ZH } from './strings.js';
 
 // UI localization (Milestone 6-I): keys are the English source strings; zh-CN
 // swaps them via the ZH dictionary, anything else shows the key as-is.
-const APP_VERSION = '0.3.13';
+const APP_VERSION = '0.3.14';
 const lang = ref('zh-CN');
 const t = (s) => (lang.value === 'zh-CN' && Object.prototype.hasOwnProperty.call(ZH, s) ? ZH[s] : s);
 
