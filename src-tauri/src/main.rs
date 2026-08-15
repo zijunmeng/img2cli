@@ -604,6 +604,7 @@ fn main() {
             capture::capture_region,
             capture::cancel_capture,
             capture::get_captured_image,
+            capture::get_window_rects,
             capture::show_capture_overlay
         ])
         .build(tauri::generate_context!())

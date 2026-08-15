@@ -16,6 +16,35 @@ pub fn capture_full_screen(_app: &AppHandle, state: &DaemonState) -> Result<(), 
         if let Ok(mut lock) = state.captured_image.lock() {
             *lock = Some(full);
         }
+
+        // Auto window detection (Roadmap 6-J): snapshot the on-screen window
+        // rects alongside the frozen frame. CSS px = physical px / scale.
+        // Filter: titled, non-minimized, reasonably sized windows — empty
+        // titles skip tool overlays (including our own capture window).
+        let scale = mon.scale_factor().unwrap_or(1.0);
+        let mut rects = Vec::new();
+        if let Ok(windows) = xcap::Window::all() {
+            for w in windows {
+                let (Ok(title), Ok(x), Ok(y), Ok(width), Ok(height), Ok(minimized)) =
+                    (w.title(), w.x(), w.y(), w.width(), w.height(), w.is_minimized())
+                else {
+                    continue;
+                };
+                if minimized || title.is_empty() || width < 40 || height < 40 {
+                    continue;
+                }
+                rects.push(daemon::WindowRect {
+                    x: (x as f32 / scale) as i32,
+                    y: (y as f32 / scale) as i32,
+                    w: (width as f32 / scale) as i32,
+                    h: (height as f32 / scale) as i32,
+                    title,
+                });
+            }
+        }
+        if let Ok(mut lock) = state.window_rects.lock() {
+            *lock = rects;
+        }
         Ok(())
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
@@ -58,6 +87,13 @@ fn close_capture_overlay(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("capture") {
         let _ = win.close();
     }
+}
+
+/// On-screen window rects (CSS px) captured with the frozen frame — consumed
+/// by the overlay's auto window detection (Roadmap 6-J).
+#[tauri::command]
+pub fn get_window_rects(state: tauri::State<'_, DaemonState>) -> Result<Vec<daemon::WindowRect>, String> {
+    Ok(state.window_rects.lock().map_err(|_| "Lock failed")?.clone())
 }
 
 #[tauri::command]
@@ -129,6 +165,19 @@ pub fn capture_region(
                 height: ch as usize,
                 bytes: Cow::Owned(cropped.into_raw()),
             });
+        }
+
+        // Remember the confirmed selection (Roadmap 6-L) so the next capture
+        // can preload it for repeat captures of the same region. Always
+        // recorded; the capture_remember_region toggle gates the preload.
+        if let Ok(mut cfg) = state.config.write() {
+            cfg.last_capture_rect = Some(crate::config::CaptureRect {
+                x: x,
+                y: y,
+                w: w as i32,
+                h: h as i32,
+            });
+            let _ = cfg.save();
         }
         // Dynamic hint: use the configured hotkey + injection mode (spec §11.3)
         let (hotkey, mode) = if let Ok(cfg) = state.config.read() {

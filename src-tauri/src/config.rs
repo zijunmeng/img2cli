@@ -31,6 +31,16 @@ pub struct TargetConfig {
     pub remember_password: Option<bool>,
 }
 
+/// The last confirmed capture selection in CSS pixels — preloaded on the
+/// next capture when `capture_remember_region` is on (Roadmap 6-L).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq)]
+pub struct CaptureRect {
+    pub x: i32,
+    pub y: i32,
+    pub w: i32,
+    pub h: i32,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     #[serde(default)]
@@ -66,6 +76,20 @@ pub struct AppConfig {
     #[serde(default = "default_language")]
     pub language: String,
 
+    // Capture options (v0.3.13, Roadmap 6-J / 6-L)
+    #[serde(default = "default_capture_auto_detect")]
+    pub capture_auto_detect: bool,
+    #[serde(default = "default_capture_remember_region")]
+    pub capture_remember_region: bool,
+    #[serde(default = "default_capture_show_hints")]
+    pub capture_show_hints: bool,
+    #[serde(default = "default_capture_border_width")]
+    pub capture_border_width: u32,
+    #[serde(default = "default_capture_mask_opacity")]
+    pub capture_mask_opacity: u32,
+    #[serde(default)]
+    pub last_capture_rect: Option<CaptureRect>,
+
     // When Direct injection can't be verified as delivered, also copy the
     // path to the clipboard as insurance (P0, docs/ISSUES_20260809.md §2).
     // The former post_paste_wait_ms / input_release_timeout_ms fields were
@@ -94,6 +118,11 @@ fn default_upload_strategy() -> String { "eager".to_string() }
 fn default_clean_keep_days() -> u32 { 1 }
 fn default_theme() -> String { "dracula".to_string() }
 fn default_language() -> String { "zh-CN".to_string() }
+fn default_capture_auto_detect() -> bool { true }
+fn default_capture_remember_region() -> bool { true }
+fn default_capture_show_hints() -> bool { true }
+fn default_capture_border_width() -> u32 { 2 }
+fn default_capture_mask_opacity() -> u32 { 45 }
 fn default_fallback_to_copy() -> bool { true }
 
 /// How the generated paste-text is delivered to the AI CLI.
@@ -152,6 +181,12 @@ impl Default for AppConfig {
             clean_keep_days: default_clean_keep_days(),
             theme: default_theme(),
             language: default_language(),
+            capture_auto_detect: default_capture_auto_detect(),
+            capture_remember_region: default_capture_remember_region(),
+            capture_show_hints: default_capture_show_hints(),
+            capture_border_width: default_capture_border_width(),
+            capture_mask_opacity: default_capture_mask_opacity(),
+            last_capture_rect: None,
             fallback_to_copy: default_fallback_to_copy(),
             ssh: Some(SshConfig {
                 enabled: false,

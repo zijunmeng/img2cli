@@ -43,6 +43,19 @@ pub struct DaemonState {
     pub log_history: Arc<Mutex<Vec<String>>>,
     pub config: Arc<RwLock<AppConfig>>,
     pub captured_image: Arc<std::sync::Mutex<Option<image::RgbaImage>>>,
+    /// On-screen window rects (CSS px) captured alongside the frozen frame —
+    /// feeds the overlay's auto window detection (Roadmap 6-J).
+    pub window_rects: Arc<std::sync::Mutex<Vec<WindowRect>>>,
+}
+
+/// A detected on-screen window rectangle in CSS pixels.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WindowRect {
+    pub x: i32,
+    pub y: i32,
+    pub w: i32,
+    pub h: i32,
+    pub title: String,
 }
 
 pub fn log_message(app_handle: &AppHandle, log_history: &Arc<Mutex<Vec<String>>>, message: &str) {
@@ -142,6 +155,7 @@ pub fn start_daemon(app_handle: AppHandle, config: AppConfig) -> DaemonState {
         log_history,
         config: config_lock,
         captured_image: Arc::new(std::sync::Mutex::new(None)),
+        window_rects: Arc::new(std::sync::Mutex::new(Vec::new())),
     }
 }
 
