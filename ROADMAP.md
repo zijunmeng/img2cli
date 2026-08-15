@@ -81,7 +81,8 @@ This file tracks future architecture improvements, user experience features, and
 
 ## 7. Milestone 6: UX Simplification Batch (Short-Term, v0.3.12 candidate)
 
-> Recorded 2026-08-14 after real-world v0.3.11 testing on Orca; items E–L added 2026-08-15. **Deferred by decision — do not implement until picked up deliberately.**
+> Recorded 2026-08-14 after real-world v0.3.11 testing on Orca; items E–L added 2026-08-15.
+> **Status: A–I shipped in v0.3.12 (2026-08-15). K dropped by decision. H, J, L remain deferred → v0.4.**
 
 ### A. Main Window Free Resizing
 * **Defect**: The Settings window is locked at 800×600 and cannot be resized.
@@ -153,12 +154,8 @@ This file tracks future architecture improvements, user experience features, and
   2. In the overlay, hit-test cursor position against window rects (CSS→physical px conversion, same scale handling as `capture_region`), draw the hover outline + dimension labels + hint bar.
   3. Click-to-snap feeds the window rect into the existing crop path; drag still enters the adjustable-selection editor.
 
-### K. UI Font Customization
-* **Reference**: [`docs/design-ref/snipaste-general-font.png`](docs/design-ref/snipaste-general-font.png) — Snipaste 常规 tab has an 界面字体 dropdown ("Microsoft YaHei UI, 9"); the same tab also offers 主题颜色自定义 and 托盘图标 options.
-* **Gap**: img2cli's UI uses the webview default font; no family/字形/size choice.
-* **Action**:
-  1. Settings: font family (enumerate system fonts or free-text), style/weight, size — applied as root CSS variables, persisted in `AppConfig`.
-  2. Optional companions from the same Snipaste tab: custom theme accent color; tray-icon variant.
+### K. ~~UI Font Customization~~ — DROPPED (2026-08-15, by decision)
+* Removed from scope; not planned. (Reference screenshot kept at `docs/design-ref/snipaste-general-font.png`.)
 
 ### L. Capture Options Settings Tab (Snipaste-style)
 * **Reference**: [`docs/design-ref/snipaste-capture-options.png`](docs/design-ref/snipaste-capture-options.png) + [`docs/design-ref/snipaste-capture-appearance.png`](docs/design-ref/snipaste-capture-appearance.png). Snipaste's 截屏选项 exposes: 自动检测窗口 / 自动检测界面元素 / 捕捉鼠标指针 / 截屏时其他窗口激活自动退出 / 历史截屏区域数(8)+循环 / 历史记录数(20) / 音效文件 / 边框宽度(3px) / 遮罩颜色 / 显示锚点+锚点描边颜色 / 放大镜显示内容(遮罩/边框/锚点) / 全屏十字线 / 辅助线 / 显示快捷键提示 / 恢复默认.
