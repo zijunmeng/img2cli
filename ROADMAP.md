@@ -81,7 +81,7 @@ This file tracks future architecture improvements, user experience features, and
 
 ## 7. Milestone 6: UX Simplification Batch (Short-Term, v0.3.12 candidate)
 
-> Recorded 2026-08-14 after real-world v0.3.11 testing on Orca; items E–G added 2026-08-15. **Deferred by decision — do not implement until picked up deliberately.**
+> Recorded 2026-08-14 after real-world v0.3.11 testing on Orca; items E–H added 2026-08-15. **Deferred by decision — do not implement until picked up deliberately.**
 
 ### A. Main Window Free Resizing
 * **Defect**: The Settings window is locked at 800×600 and cannot be resized.
@@ -125,3 +125,15 @@ This file tracks future architecture improvements, user experience features, and
 * **Action**:
   1. `default_theme()` → `"dracula"`.
   2. Retune the dracula entry in `App.vue` (~line 602): `bgApp #282a36 → #1e1e2e`; sidebar `rgba(33,34,44,.6) → #181825`-family; cards/borders shifted from gray rgba to blue-tinted surfaces (`#313244`-family). Keep the dracula accent `#bd93f9` unless asked otherwise.
+
+### H. Hosts & Targets Redesign (Orca-style card list)
+* **Gap**: The Hosts & Targets tab is a flat form-based editor — hard to scan and manage multiple targets.
+* **Reference**: [`docs/design-ref/orca-ssh-hosts.png`](docs/design-ref/orca-ssh-hosts.png) (Orca's SSH manager, captured 2026-08-15). Card-based vertical list:
+  * Per card: host name (bold) · status dot + text (green Connected / gray Disconnected) · connection details `user@host:port` · small note · right-aligned icon actions (view / refresh / edit / delete) · status-specific buttons (Connected → Disconnect; Disconnected → Test + Connect).
+  * Header: title + subtitle; "Targets" section with **Import** and **Add Target** global actions.
+  * Style: dark cards on a darker background, generous padding (≈16px in-card, ≈24px between), white primary / gray secondary text — mapped to the active theme's CSS variables, not hardcoded hex.
+* **Action**:
+  1. Rebuild the tab as a card list (one card per `TargetConfig`); the existing form opens only for Add/Edit.
+  2. Status wiring: reuse the existing `test_connection` IPC for the Test button; cache the last result as the status dot.
+  3. Import button → existing `load_ssh_config` (imports from `~/.ssh/config`).
+  4. Connect/Disconnect don't map 1:1 (img2cli uploads on demand) — map them to enable/disable + password set/clear.
