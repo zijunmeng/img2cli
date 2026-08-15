@@ -27,6 +27,78 @@ fn get_config(state: tauri::State<'_, daemon::DaemonState>) -> Result<AppConfig,
     }
 }
 
+/// Reject hotkey strings that would hijack system-wide shortcuts (Roadmap
+/// Milestone 6-C). Pure string-token validation so it is unit-testable without
+/// an AppHandle; `Shortcut::from_str` still gates final parseability later at
+/// OS registration. Registering e.g. Ctrl+V globally would break pasting in
+/// every application AND self-sabotage the Copy-mode flow (every manual paste
+/// would spawn a failed "no image in clipboard" job — observed 2026-08-14).
+fn hotkey_rejection(hotkey: &str) -> Option<String> {
+    let s = hotkey.trim();
+    if s.is_empty() {
+        return Some("hotkey is empty".to_string());
+    }
+    let parts: Vec<&str> = s.split('+').map(str::trim).collect();
+    let (mods, last) = parts.split_at(parts.len() - 1);
+    let key = last[0];
+
+    let has = |names: &[&str]| {
+        mods.iter()
+            .any(|m| names.iter().any(|n| m.eq_ignore_ascii_case(n)))
+    };
+    let has_ctrl = has(&["Ctrl", "Control"]);
+    let has_alt = has(&["Alt"]);
+    let has_shift = has(&["Shift"]);
+    let has_meta = has(&["Meta", "Win", "Super", "Cmd", "Command"]);
+
+    for m in mods {
+        let known = ["Ctrl", "Control", "Alt", "Shift", "Meta", "Win", "Super", "Cmd", "Command"]
+            .iter()
+            .any(|n| m.eq_ignore_ascii_case(n));
+        if !known {
+            return Some(format!("unknown modifier '{}'", m));
+        }
+    }
+
+    // OS-level combinations (Win/Cmd + key open system features) are never
+    // safe for an app to own globally.
+    if has_meta {
+        return Some("Win/Meta combinations are reserved by the OS".to_string());
+    }
+
+    // No modifier: only function keys are safe to own globally (bare letters
+    // would be swallowed while typing anywhere; F8 is a supported default).
+    if mods.is_empty() {
+        let mut chars = key.chars();
+        let is_function_key = matches!(chars.next(), Some('F' | 'f'))
+            && {
+                let rest: String = chars.collect();
+                !rest.is_empty()
+                    && rest.chars().all(|c| c.is_ascii_digit())
+                    && rest.parse::<u8>().map(|n| (1..=24).contains(&n)).unwrap_or(false)
+            };
+        if !is_function_key {
+            return Some(
+                "a hotkey without modifiers must be a function key (F1-F24)".to_string(),
+            );
+        }
+        return None;
+    }
+
+    // Standard edit/system shortcuts that must keep working inside every app.
+    let ctrl_blacklist = ["C", "V", "X", "Z", "S", "A", "F4"];
+    let ctrl_standard = has_ctrl
+        && !has_alt
+        && !has_shift
+        && ctrl_blacklist.iter().any(|k| key.eq_ignore_ascii_case(k));
+    let alt_standard =
+        has_alt && !has_ctrl && (key.eq_ignore_ascii_case("F4") || key.eq_ignore_ascii_case("Tab"));
+    if ctrl_standard || alt_standard {
+        return Some(format!("'{}' is a standard system shortcut", s));
+    }
+    None
+}
+
 #[tauri::command]
 fn save_config(
     config: AppConfig,
@@ -42,6 +114,29 @@ fn save_config(
     } else {
         ("".to_string(), "".to_string())
     };
+
+    // Milestone 6-C: reject forbidden hotkeys BEFORE persisting, so a bad
+    // value can never reach config.toml (previously the config saved first
+    // and only failed later during OS re-registration, leaving disk + OS
+    // state inconsistent).
+    for (label, hotkey) in [
+        ("Upload hotkey", &config.global_hotkey),
+        ("Screenshot hotkey", &config.screenshot_hotkey),
+    ] {
+        if let Some(reason) = hotkey_rejection(hotkey) {
+            return Err(format!("Invalid {} '{}': {}", label, hotkey, reason));
+        }
+        if tauri_plugin_global_shortcut::Shortcut::from_str(hotkey).is_err() {
+            return Err(format!("Invalid {} '{}': unparseable shortcut format", label, hotkey));
+        }
+    }
+    if config
+        .global_hotkey
+        .trim()
+        .eq_ignore_ascii_case(config.screenshot_hotkey.trim())
+    {
+        return Err("Upload hotkey and Screenshot hotkey must be different".to_string());
+    }
 
     config.save()?;
 
@@ -105,6 +200,34 @@ fn save_config(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::hotkey_rejection;
+
+    #[test]
+    fn rejects_system_destructive_hotkeys() {
+        let bad = [
+            "Ctrl+V", "Ctrl+C", "Ctrl+X", "Ctrl+Z", "Ctrl+S", "Ctrl+A", "Ctrl+F4",
+            "Alt+F4", "Alt+Tab", "Win+E", "Meta+L", "Cmd+Space", "A", "V", "Space",
+            "Tab", "", "Ctrl+Foo+B", "F", "F99", "F0",
+        ];
+        for h in bad {
+            assert!(hotkey_rejection(h).is_some(), "should reject {:?}", h);
+        }
+    }
+
+    #[test]
+    fn allows_safe_hotkeys() {
+        let ok = [
+            "F8", "F12", "F1", "Alt+V", "Alt+Shift+S", "Alt+X", "Ctrl+Alt+V",
+            "Ctrl+Shift+P", "Ctrl+B", "Shift+D", "Alt+P",
+        ];
+        for h in ok {
+            assert!(hotkey_rejection(h).is_none(), "should allow {:?}", h);
+        }
+    }
 }
 
 #[tauri::command]
