@@ -48,23 +48,27 @@ This file tracks future architecture improvements, user experience features, and
 
 ---
 
-## 4. Milestone 3: Editor Annotation Overlays (Long-Term)
+## 4. Milestone 3: Annotation Editor (user-requested 2026-08-16 → v0.4.0)
 
-### A. Inline Crop Annotations
-* **Goal**: Add vector-based drawing directly on the screenshot selection area.
-* **Action**:
-  1. Draw lightweight vector elements (Arrow, Highlight Rectangle, Mosaic/Blur brush) on a transparent HTML5 `<canvas>` inside the Vue crop overlay.
-  2. Render annotations locally to the cropped image buffer before initiating compression or upload.
+### A. Annotation Tools on the Selection
+* **Goal**: Snipaste-class editing inside the capture overlay's confirmed selection.
+* **Toolset** (user's list): 箭头 arrow · 画笔 freehand pen · 马赛克 mosaic/pixelate · 文字 text · **保存图片 save-to-file** · (plus: highlight rect from the original plan, undo/redo, color/width pickers).
+* **Architecture**:
+  1. After a selection is confirmed (6-O state machine), show a tool toolbar; annotations render on a transparent HTML5 `<canvas>` layered over the frozen frame within the selection — stored as vector objects (arrow = line+head, pen = polyline, text = text box, mosaic = pixelate region sampled from the frozen pixels by down/up-scaling).
+  2. On final confirm, rasterize annotations onto the image buffer BEFORE crop → clipboard → the existing upload/inject pipeline (annotated image flows through unchanged).
+  3. Save-to-file: plugin-dialog `save()` + a `write_image` command (PNG/JPG).
+  4. References in `ref/pkg`: flameshot & ksnip (annotation model, tool UX), ShareX (editor), greenshot (text/mosaic details).
 
 ---
 
-## 5. Milestone 4: Memory-Aware Screen Pinning (Future)
+## 5. Milestone 4: Screen Pinning / 贴图 (user-requested 2026-08-16 → v0.4.0+)
 
-### A. Static Window Pinning (贴图)
-* **Goal**: Pin screenshot captures on top of other applications without incurring Tauri Webview multi-process memory bloat.
+### A. Pin the Capture to the Screen (Snipaste-style)
+* **Goal**: Float the confirmed crop as an always-on-top, draggable, resizable mini-window; Esc/× to close; optionally scroll-to-zoom.
 * **Action**:
-  1. Avoid full-blown Webview window instances for pinned frames.
-  2. Explore creating lightweight, raw OS-native windows (via Rust `tao` or simple custom Win32/Cocoa window bindings) that render static image frames using CPU/GPU directly, keeping memory footprints under 30MB.
+  1. First cut: a small Tauri webview window rendering the crop (fast to build; acceptable memory for 1-2 pins).
+  2. Memory-aware upgrade (original plan): raw OS-native windows (`tao`/custom Win32-Cocoa) rendering static frames, target <30MB per pin — `ref/pkg/wispterm` is the portable/native-window reference.
+  3. Pin action joins the editor toolbar (Milestone 3) alongside copy/save/upload.
 
 ---
 
