@@ -157,6 +157,11 @@ This file tracks future architecture improvements, user experience features, and
 ### K. ~~UI Font Customization~~ — DROPPED (2026-08-15, by decision)
 * Removed from scope; not planned. (Reference screenshot kept at `docs/design-ref/snipaste-general-font.png`.)
 
+### O. Overlay Selection State Machine: unconfirmed rects must not lock edit mode (v0.3.13 follow-up)
+* **Defect** (reported 2026-08-16): with "remember last selection" on (default), every Alt+X opens the overlay with the old rect already in MOVE-EDIT mode — no user confirmation happened, yet the screen is masked and mousedown inside the rect can only move it; re-drawing requires starting outside the rect. Same lock-in feel applies before any selection is confirmed.
+* **Desired logic**: cursor stays crosshair and drawing a new region is always possible until the user CONFIRMS a selection (clicks a detected window, draws a box, or accepts the proposal); move/handles only exist for confirmed selections.
+* **Fix sketch**: split the preloaded last-region out of `rect` into a `pendingRect` "proposal" state — rendered as a dashed outline with `pointer-events: none` (plus a small "Enter to reuse / drag to reselect" label); Enter captures the proposal directly (one-key repeat capture); any mousedown discards it and starts a normal draw; click-to-snap on a detected window remains an explicit confirmation into edit mode.
+
 ### N. Merge Default-Host Form into the Card List (v0.3.13 follow-up)
 * **Issue** (reported 2026-08-16): the Hosts & Targets page has two host-editing surfaces — the top "default host" form (`config.ssh`) and the Dynamic Router Targets card list. The form is load-bearing (DefaultSsh fallback route — most uploads actually go through it; the keyring password lives on it; "Set Default" copies into it) but duplicative UI.
 * **Action**:
