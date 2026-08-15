@@ -169,6 +169,14 @@ This file tracks future architecture improvements, user experience features, and
 * **Defect** (reported 2026-08-16): inside a detected window, mousedown snaps the window instantly — so a drag starting inside a detected window can never draw a custom selection. Drawing from ANY point must always work before confirmation.
 * **Fix sketch (Snipaste semantics)**: mousedown ALWAYS starts a draw (remember the hovered window at press time in `downHover`); on mouseup, if the drawn rect is tiny (≈ click-in-place) AND `downHover` exists → adopt the hovered window as the selection; any real drag keeps the drawn rect. ~10 lines in capMouseDown/capMouseUp.
 
+### Q. Default host must be a FLAG on a target card, not a duplicated pinned card (v0.3.15 follow-up)
+* **Defect** (reported 2026-08-16): the pinned default-host card duplicates a host the user already has as a target (91_mengzijun twice), the 默认 badge heuristic (`target.host === config.ssh.host`) lights up multiple cards, and "Set Default" COPIES into config.ssh — later edits to the target diverge from the silently-stale default.
+* **Fix sketch (Orca model — one list, default is an attribute)**:
+  1. Remove the pinned config.ssh card from the UI entirely.
+  2. Add `default_target: Option<String>` (keyed by match_pattern) to AppConfig, or a boolean per TargetConfig; "Set Default" sets the flag (exactly one card wears the 默认 badge).
+  3. `DefaultSshResolver`: resolve the default from the flagged target first; fall back to legacy `config.ssh` when no flag exists (backward compat).
+  4. Migration on load: if `config.ssh.enabled` and a target matches its host → flag that target.
+
 ### N. Merge Default-Host Form into the Card List (v0.3.13 follow-up)
 * **Issue** (reported 2026-08-16): the Hosts & Targets page has two host-editing surfaces — the top "default host" form (`config.ssh`) and the Dynamic Router Targets card list. The form is load-bearing (DefaultSsh fallback route — most uploads actually go through it; the keyring password lives on it; "Set Default" copies into it) but duplicative UI.
 * **Action**:
