@@ -81,7 +81,7 @@ This file tracks future architecture improvements, user experience features, and
 
 ## 7. Milestone 6: UX Simplification Batch (Short-Term, v0.3.12 candidate)
 
-> Recorded 2026-08-14 after real-world v0.3.11 testing on Orca; items E–J added 2026-08-15. **Deferred by decision — do not implement until picked up deliberately.**
+> Recorded 2026-08-14 after real-world v0.3.11 testing on Orca; items E–L added 2026-08-15. **Deferred by decision — do not implement until picked up deliberately.**
 
 ### A. Main Window Free Resizing
 * **Defect**: The Settings window is locked at 800×600 and cannot be resized.
@@ -152,3 +152,21 @@ This file tracks future architecture improvements, user experience features, and
   1. Enumerate on-screen window rects per platform (Win32 `EnumWindows`+`GetWindowRect` filtering visible/owned; macOS `CGWindowList`; Linux X11) and expose them to the overlay alongside the frozen frame.
   2. In the overlay, hit-test cursor position against window rects (CSS→physical px conversion, same scale handling as `capture_region`), draw the hover outline + dimension labels + hint bar.
   3. Click-to-snap feeds the window rect into the existing crop path; drag still enters the adjustable-selection editor.
+
+### K. UI Font Customization
+* **Reference**: [`docs/design-ref/snipaste-general-font.png`](docs/design-ref/snipaste-general-font.png) — Snipaste 常规 tab has an 界面字体 dropdown ("Microsoft YaHei UI, 9"); the same tab also offers 主题颜色自定义 and 托盘图标 options.
+* **Gap**: img2cli's UI uses the webview default font; no family/字形/size choice.
+* **Action**:
+  1. Settings: font family (enumerate system fonts or free-text), style/weight, size — applied as root CSS variables, persisted in `AppConfig`.
+  2. Optional companions from the same Snipaste tab: custom theme accent color; tray-icon variant.
+
+### L. Capture Options Settings Tab (Snipaste-style)
+* **Reference**: [`docs/design-ref/snipaste-capture-options.png`](docs/design-ref/snipaste-capture-options.png) + [`docs/design-ref/snipaste-capture-appearance.png`](docs/design-ref/snipaste-capture-appearance.png). Snipaste's 截屏选项 exposes: 自动检测窗口 / 自动检测界面元素 / 捕捉鼠标指针 / 截屏时其他窗口激活自动退出 / 历史截屏区域数(8)+循环 / 历史记录数(20) / 音效文件 / 边框宽度(3px) / 遮罩颜色 / 显示锚点+锚点描边颜色 / 放大镜显示内容(遮罩/边框/锚点) / 全屏十字线 / 辅助线 / 显示快捷键提示 / 恢复默认.
+* **Gap**: img2cli's capture overlay has no user-tunable options.
+* **Action** (prioritized subset mapped to img2cli):
+  1. 自动检测窗口 / 界面元素 toggles — the companion switches for item J (+ 隐藏 1x1 提示).
+  2. 历史截屏区域 — remember the last N selection rects, cycle through them (high value for the AI-CLI workflow: repeated captures of the same terminal region).
+  3. Selection appearance: border width, mask (dim) color, show anchors + color, show shortcut hints (hint already exists — make it toggleable).
+  4. 捕捉鼠标指针 (draw the cursor into the captured image) and focus-loss auto-exit.
+  5. 音效文件 + 恢复默认 per section.
+  6. Bigger optional sub-features, later: magnifier (放大镜), fullscreen crosshair, guides.
