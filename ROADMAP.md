@@ -81,7 +81,7 @@ This file tracks future architecture improvements, user experience features, and
 
 ## 7. Milestone 6: UX Simplification Batch (Short-Term, v0.3.12 candidate)
 
-> Recorded 2026-08-14 after real-world v0.3.11 testing on Orca. **Deferred by decision — do not implement until picked up deliberately.**
+> Recorded 2026-08-14 after real-world v0.3.11 testing on Orca; items E–G added 2026-08-15. **Deferred by decision — do not implement until picked up deliberately.**
 
 ### A. Main Window Free Resizing
 * **Defect**: The Settings window is locked at 800×600 and cannot be resized.
@@ -106,3 +106,22 @@ This file tracks future architecture improvements, user experience features, and
   1. Keep three modes: **Auto** (default — host policy decides the full table: plain terminal → Direct, Orca → Copy), **Direct** (force typing; never touches the clipboard), **Copy** (force clipboard + manual Ctrl+V).
   2. Remove Swap/PasteKeep from the UI; migrate existing config values (`swap → auto`, `paste_keep → copy`) while serde keeps accepting the old strings.
   3. Extend `host_policy.rs` from the Orca-only override to the full decision table, so Auto is genuinely automatic.
+
+### E. Single-Instance Enforcement
+* **Defect**: Launching img2cli while it is already running spawns a second process — two tray icons / two taskbar entries, and both instances attempt global-hotkey registration (conflict).
+* **Action**:
+  1. Add `tauri-plugin-single-instance`.
+  2. On second launch, show + focus the existing `main` window (surface it from tray) and exit the new process.
+
+### F. System Logs Export / One-Click Copy
+* **Gap**: The System Logs tab has no way to get the logs out.
+* **Action**: Add toolbar buttons to the System Logs tab:
+  1. **Copy All** — write the full `log_history` to the clipboard.
+  2. **Export…** — save to a `.log`/`.txt` file via the existing dialog plugin.
+
+### G. Dracula as Default Dark + Deep-Blue Background (herdr reference)
+* **Gap 1**: The default theme is still `apple-dark` (`default_theme()` in `config.rs`).
+* **Gap 2**: The `dracula` theme's background reads **gray**, not deep blue: `bgApp #282a36` with desaturated gray sidebar/cards (`rgba(33,34,44,.6)` / `rgba(68,71,90,.4)`) — the blue tint gets washed out. Reference (herdr screenshot, 2026-08-15): base `#1e1e2e`, sidebar `#181825` (Catppuccin-Mocha-family deep blue), accent pink `#f92672`.
+* **Action**:
+  1. `default_theme()` → `"dracula"`.
+  2. Retune the dracula entry in `App.vue` (~line 602): `bgApp #282a36 → #1e1e2e`; sidebar `rgba(33,34,44,.6) → #181825`-family; cards/borders shifted from gray rgba to blue-tinted surfaces (`#313244`-family). Keep the dracula accent `#bd93f9` unless asked otherwise.
