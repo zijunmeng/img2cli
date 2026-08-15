@@ -120,7 +120,7 @@ fn save_config(
     // and only failed later during OS re-registration, leaving disk + OS
     // state inconsistent).
     for (label, hotkey) in [
-        ("Upload hotkey", &config.global_hotkey),
+        ("Inject hotkey", &config.global_hotkey),
         ("Screenshot hotkey", &config.screenshot_hotkey),
     ] {
         if let Some(reason) = hotkey_rejection(hotkey) {
@@ -135,7 +135,7 @@ fn save_config(
         .trim()
         .eq_ignore_ascii_case(config.screenshot_hotkey.trim())
     {
-        return Err("Upload hotkey and Screenshot hotkey must be different".to_string());
+        return Err("Inject hotkey and Screenshot hotkey must be different".to_string());
     }
 
     config.save()?;
@@ -561,6 +561,22 @@ fn main() {
             let menu = builder.item(&exit_i).build()?;
             
             let mut tray_builder = TrayIconBuilder::with_id("main-tray")
+                // Left click opens the window; the menu is right-click only.
+                .show_menu_on_left_click(false)
+                .on_tray_icon_event(|tray, event| {
+                    if let tauri::tray::TrayIconEvent::Click {
+                        button: tauri::tray::MouseButton::Left,
+                        button_state: tauri::tray::MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                })
                 .menu(&menu)
                 .on_menu_event(|app, event| {
                     match event.id().as_ref() {

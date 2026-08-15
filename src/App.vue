@@ -4,16 +4,12 @@
        @mousedown="capMouseDown" @mousemove="capMouseMove" @mouseup="capMouseUp">
     <img v-if="capturedImageSrc" :src="capturedImageSrc" class="absolute inset-0 w-full h-full object-cover pointer-events-none" />
     <div v-if="!hasRect && config.capture_show_hints" class="absolute top-5 left-1/2 -translate-x-1/2 text-white text-sm bg-black/70 px-4 py-1.5 rounded-full pointer-events-none shadow-lg z-[10000]">{{ t('Drag to select · Click a window to snap · Enter to save · Esc to cancel') }}</div>
-    <!-- Pending last-region proposal (6-O): dashed, inert, Enter to reuse -->
-    <div v-if="pendingRect && !hasRect" :style="pendingStyle" class="absolute pointer-events-none z-[9999]">
-      <span class="absolute -top-6 left-0 bg-black/70 text-white text-[11px] px-1.5 py-0.5 rounded-md whitespace-nowrap">{{ t('Enter to reuse · drag to reselect') }}</span>
-    </div>
     <!-- Auto-detected window under the cursor (6-J): outline + size label -->
     <div v-if="hoverRect && !hasRect" :style="hoverStyle" class="absolute pointer-events-none z-[10000]">
       <span class="absolute -top-6 left-0 bg-[#2997ff] text-white text-[11px] px-1.5 py-0.5 rounded-md font-mono whitespace-nowrap shadow-lg">{{ Math.round(hoverRect.w) }} × {{ Math.round(hoverRect.h) }}</span>
     </div>
-    <div v-if="hasRect" :style="[rectStyle, selBorderStyle]" @mousedown.stop="startMove"
-         class="absolute border-solid border-[#2997ff] box-border cursor-move z-[10000]">
+    <div v-if="hasRect" :style="[rectStyle, selBorderStyle]" @mousedown.stop="rectMouseDown"
+         class="absolute border-solid border-[#2997ff] box-border cursor-crosshair z-[10000]">
       <div v-for="hd in handles" :key="hd" :style="handleStyle(hd)" :class="handleCursorClass(hd)"
            @mousedown.stop.prevent="startResize(hd, $event)"
            class="absolute w-2.5 h-2.5 bg-white border border-[#2997ff] rounded-sm shadow"></div>
@@ -145,7 +141,7 @@
 
               <div>
                 <label class="block text-xs font-semibold text-[var(--color-text-secondary)] mb-1">
-                  {{ t('Upload Hotkey') }}
+                  {{ t('Inject Hotkey') }}
                   <span v-if="recordingHotkey" class="text-[var(--color-accent)] font-bold ml-1 animate-pulse">{{ t('(Recording...)') }}</span>
                   <span v-else class="text-[var(--color-text-secondary)]/80 normal-case font-normal ml-1">{{ t('(click & press keys)') }}</span>
                 </label>
@@ -257,16 +253,6 @@
             </div>
             <div class="flex items-center justify-between py-1">
               <div>
-                <span class="block text-sm font-medium text-[var(--color-text-primary)]">{{ t('Remember last selection') }}</span>
-                <span class="block text-xs text-[var(--color-text-secondary)]">{{ t('Preload the previous region on the next capture') }}</span>
-              </div>
-              <label class="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" v-model="config.capture_remember_region" class="sr-only peer" />
-                <div class="w-11 h-6 bg-[var(--bg-toggle)] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-[var(--color-toggle-knob)] after:border-[var(--color-toggle-knob)] after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--color-accent)]"></div>
-              </label>
-            </div>
-            <div class="flex items-center justify-between py-1">
-              <div>
                 <span class="block text-sm font-medium text-[var(--color-text-primary)]">{{ t('Show capture hints') }}</span>
               </div>
               <label class="relative inline-flex items-center cursor-pointer">
@@ -351,7 +337,7 @@
                     <span v-if="defaultHasPassword" class="text-[11px]" :title="t('✓ Password saved (keyring)')">🔑</span>
                   </div>
                   <div class="text-xs text-[var(--color-text-secondary)] font-mono truncate mt-0.5">
-                    {{ config.ssh.username }}@{{ config.ssh.host }}:{{ config.ssh.port || 22 }} → {{ config.ssh.remote_dir }}
+                    {{ config.ssh.username }}@{{ config.ssh.host }}:{{ config.ssh.port || 22 }}
                   </div>
                 </div>
                 <label class="relative inline-flex items-center cursor-pointer shrink-0">
@@ -383,7 +369,7 @@
                     <span v-if="isDefaultTarget(idx)" class="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">{{ t('Default') }}</span>
                   </div>
                   <div class="text-xs text-[var(--color-text-secondary)] font-mono truncate mt-0.5">
-                    <template v-if="target.type === 'ssh'">{{ target.username }}@{{ target.host }}:{{ target.port || 22 }} → {{ target.remote_dir }}</template>
+                    <template v-if="target.type === 'ssh'">{{ target.username }}@{{ target.host }}:{{ target.port || 22 }}</template>
                     <template v-else>{{ target.local_dir }}</template>
                   </div>
                 </div>
@@ -1059,19 +1045,6 @@ const capturedImageSrc = ref('');
 const rect = ref({ x: 0, y: 0, w: 0, h: 0 });               // normalized selection, CSS px
 const hasRect = computed(() => rect.value.w >= 4 && rect.value.h >= 4);
 const capAction = ref(null);                                  // 'draw' | 'move' | 'resize' | null
-// 6-O: the preloaded last region is a PROPOSAL, not a confirmed selection —
-// dashed outline, pointer-events none; Enter captures it directly, any
-// mousedown discards it and starts a fresh draw. Unconfirmed rects must
-// never lock the overlay into move-edit mode.
-const pendingRect = ref(null);
-const pendingStyle = computed(() => {
-  const r = pendingRect.value;
-  if (!r) return {};
-  return {
-    left: r.x + 'px', top: r.y + 'px', width: r.w + 'px', height: r.h + 'px',
-    border: '2px dashed #2997ff',
-  };
-});
 const capHandle = ref(null);
 const capOrigin = ref({ mx: 0, my: 0, rect: null });
 
@@ -1126,8 +1099,6 @@ const selBorderStyle = computed(() => ({
 }));
 
 const capMouseDown = (e) => {
-  // Any mousedown discards the pending proposal — the user wants to draw.
-  if (pendingRect.value) pendingRect.value = null;
   // Click-to-snap (6-J): if a detected window is under the cursor, adopt its
   // rect as the selection and enter the adjustable editor instead of drawing.
   if (hoverRect.value) {
@@ -1136,11 +1107,19 @@ const capMouseDown = (e) => {
     hoverRect.value = null;
     return;
   }
-  // Fires only for clicks OUTSIDE the selection rect (inside-rect clicks are
-  // caught by the rect's @mousedown.stop) → start drawing a fresh selection.
+  startDraw(e);
+};
+// Drawing is always available — anywhere, including INSIDE an existing
+// selection (user request 2026-08-16): a plain mousedown restarts the
+// selection; Alt+drag inside keeps the move affordance for adjusting.
+const startDraw = (e) => {
   capAction.value = 'draw';
   rect.value = { x: e.clientX, y: e.clientY, w: 0, h: 0 };
   capOrigin.value = { mx: e.clientX, my: e.clientY, rect: null };
+};
+const rectMouseDown = (e) => {
+  if (e.altKey) { startMove(e); return; }
+  startDraw(e);
 };
 const startMove = (e) => {
   capAction.value = 'move';
@@ -1406,11 +1385,6 @@ onMounted(() => {
     captureMode.value = true;
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') invoke('cancel_capture');
-      else if (e.key === 'Enter' && pendingRect.value && !hasRect.value) {
-        rect.value = pendingRect.value;
-        pendingRect.value = null;
-        confirmRect();
-      }
       else if (e.key === 'Enter' && hasRect.value) confirmRect();
     });
     
@@ -1422,24 +1396,11 @@ onMounted(() => {
         // (6-J/6-L), fetched before the reveal so nothing pops in.
         try {
           const cfg = await invoke('get_config');
-          ['capture_auto_detect', 'capture_remember_region', 'capture_show_hints',
-            'capture_border_width', 'capture_mask_opacity', 'last_capture_rect'].forEach((k) => {
+          ['capture_auto_detect', 'capture_show_hints',
+            'capture_border_width', 'capture_mask_opacity'].forEach((k) => {
             if (cfg[k] !== undefined) config.value[k] = cfg[k];
           });
           if (cfg.capture_auto_detect) winRects.value = await invoke('get_window_rects');
-          if (cfg.capture_remember_region && cfg.last_capture_rect) {
-            const r = cfg.last_capture_rect;
-            if (r.w >= 4 && r.h >= 4 && r.x < window.innerWidth && r.y < window.innerHeight) {
-              const px = Math.max(0, r.x);
-              const py = Math.max(0, r.y);
-              // 6-O: preload as a pending proposal, not an editable selection.
-              pendingRect.value = {
-                x: px, y: py,
-                w: Math.max(4, Math.min(r.w, window.innerWidth - px)),
-                h: Math.max(4, Math.min(r.h, window.innerHeight - py)),
-              };
-            }
-          }
         } catch (_) {}
         // The overlay window was built hidden (capture.rs visible:false)) so the
         // WebView's initial white frame never shows. Reveal it only after the
