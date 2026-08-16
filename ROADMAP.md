@@ -11,8 +11,8 @@ This file tracks future architecture improvements, user experience features, and
 | Version | Theme | Contents |
 |---|---|---|
 | v0.4.1 | Feel + defects | 6-R state machine v3 · 6-S element detect + Tab cycling · **overlay keys: Shift+R reuse last region, `,`/`.` cycle region history (last 8), WASD nudge cursor 1px** · IME×Direct real-test (force Copy per-host if conflicting) · host_policy → process-name detection · engineering cleanup (delete legacy `src/` CLI tree, orphan plugin-shell dep, dead_code, themed slider track) |
-| v0.4.2 | **Annotation editor** | arrow / pen / mosaic (incl. secure mode) / text / save-to-file + undo/redo + color/thickness — flameshot five-mechanism blueprint (`docs/REF_mining_20260816.md` §A) |
-| v0.4.3 | Pinning + multi-monitor | native-window pin (wispterm path + ShareX interaction spec, §C) · per-monitor capture & coordinate mapping |
+| v0.4.2 | **Annotation editor + action toolbar** | arrow / pen / mosaic (incl. secure mode) / text + undo/redo + color/thickness — flameshot five-mechanism blueprint (`docs/REF_mining_20260809.md` §A) — PLUS the confirmed-selection action toolbar, Snipaste-style: **icon buttons with hover tooltips** for 📌 贴到屏幕 (pin, pulled forward from v0.4.3; ShareX interaction spec §C, webview-based first cut) / 💾 保存到文件 (dialog save + write_image) / 📋 复制到剪贴板 / ✓ upload+inject (existing flow) |
+| v0.4.3 | Multi-monitor (+ pin upgrade) | per-monitor capture & coordinate mapping · optional native-window pin upgrade if the webview pin proves memory-heavy |
 | v0.4.4 | Performance + intelligence | SSH keep-alive pool (<200ms uploads, M1-B) · Rust-native pre-emptive freeze (M1-A) · L-tail (cursor capture / focus-loss exit / sound) · OCR→markdown code block (Windows OCR Runtime first) |
 | v0.4.5 | Buffer | regression fixes only — the goal is for this version to be EMPTY |
 | v1.0.0 | Ship | code signing (⚠️ requires purchasing a certificate — user decision), final polish, docs |
