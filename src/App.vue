@@ -1319,13 +1319,14 @@ onMounted(() => {
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') invoke('cancel_capture');
       else if (e.key === 'Enter' && hasRect.value) confirmRect();
-      // v0.4.1: Shift+R recalls the newest history region; `,` / `.` cycle it.
-      else if (e.shiftKey && (e.key === 'R' || e.key === 'r')) recallHistory(0);
-      else if (e.key === ',') cycleHistory(-1);
-      else if (e.key === '.') cycleHistory(1);
-      // WASD nudges the real cursor 1px (Rust SetCursorPos, DPI-scaled).
-      else if (['w', 'a', 's', 'd'].includes(e.key.toLowerCase())) {
-        const k = e.key.toLowerCase();
+      // v0.4.1 keys — matched via e.code (physical key): with a CJK IME
+      // active, keydown e.key arrives as "Process" for letter/punct keys,
+      // which silently killed WASD / Shift+R / `,` / `.` on IME systems.
+      else if (e.shiftKey && e.code === 'KeyR') recallHistory(0);
+      else if (e.code === 'Comma') cycleHistory(-1);
+      else if (e.code === 'Period') cycleHistory(1);
+      else if (['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)) {
+        const k = e.code.slice(3).toLowerCase();
         const dx = k === 'a' ? -1 : k === 'd' ? 1 : 0;
         const dy = k === 'w' ? -1 : k === 's' ? 1 : 0;
         invoke('nudge_cursor', { dx, dy }).catch(() => {});
