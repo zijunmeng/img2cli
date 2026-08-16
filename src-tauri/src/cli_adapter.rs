@@ -10,6 +10,7 @@
 /// Render a delivered path into the string to inject.
 pub trait CliAdapter: Send + Sync {
     /// Stable identifier for diagnostics / future detection scoring.
+    #[allow(dead_code)] // used by tests; production selects adapters structurally
     fn name(&self) -> &'static str;
     /// Turn the delivered path into the final text fragment.
     fn render(&self, path: &str) -> String;

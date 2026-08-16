@@ -13,9 +13,11 @@ pub type ArtifactId = u64;
 /// clipboard back). Now region capture creates a CapturedArtifact directly.
 #[derive(Debug, Clone)]
 pub struct CapturedArtifact {
+    #[allow(dead_code)] // future queue-age diagnostics
     pub id: ArtifactId,
     pub image: Arc<image::RgbaImage>,
     pub source: CaptureSource,
+    #[allow(dead_code)] // future queue-age diagnostics
     pub created_at: std::time::SystemTime,
 }
 
@@ -29,6 +31,8 @@ pub enum CaptureSource {
 }
 
 impl CapturedArtifact {
+    // Caller is the win/mac-gated capture pipeline.
+    #[cfg_attr(not(any(target_os = "windows", target_os = "macos")), allow(dead_code))]
     pub fn new(image: image::RgbaImage, source: CaptureSource) -> Self {
         let created_at = std::time::SystemTime::now();
         let id = created_at
@@ -369,6 +373,8 @@ pub fn upload_via_scp(
 /// right after a confirmed region lands on the clipboard, so the SFTP upload
 /// overlaps with the user switching windows. The inject hotkey then pastes
 /// the already-uploaded path instantly (fingerprint-matched fast path).
+// Caller is the win/mac-gated capture_region.
+#[cfg_attr(not(any(target_os = "windows", target_os = "macos")), allow(dead_code))]
 pub fn trigger_upload_only(app_handle: &AppHandle, state: &DaemonState, image: image::RgbaImage) {
     let config = if let Ok(config) = state.config.read() {
         config.clone()

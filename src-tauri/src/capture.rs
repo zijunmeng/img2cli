@@ -3,7 +3,10 @@
 //! Screenshot hotkey -> instantly captures screen to memory -> fullscreen transparent overlay ->
 //! loads screen image -> drag a region -> crops from memory cache -> clipboard -> upload & paste.
 
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager};
+// The overlay window builder only runs on capture-capable platforms.
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+use tauri::{WebviewUrl, WebviewWindowBuilder};
 use crate::daemon::{self, DaemonState};
 
 /// Instantly captures the primary monitor screenshot to memory *before* overlay loads.

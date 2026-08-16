@@ -240,8 +240,7 @@ fn nudge_cursor(dx: i32, dy: i32) -> Result<(), String> {
         use windows_sys::Win32::UI::WindowsAndMessaging::{GetCursorPos, SetCursorPos};
         let scale = xcap::Monitor::all()
             .ok()
-            .and_then(|ms| ms.first().map(|m| m.scale_factor().ok()).flatten())
-            .unwrap_or(None)
+            .and_then(|ms| ms.first().and_then(|m| m.scale_factor().ok()))
             .unwrap_or(1.0);
         let sx = (dx as f32 * scale).round() as i32;
         let sy = (dy as f32 * scale).round() as i32;
@@ -584,7 +583,7 @@ fn main() {
                 true,
                 None::<&str>,
             )?;
-            let mut builder = MenuBuilder::new(app).item(&show_i);
+            let builder = MenuBuilder::new(app).item(&show_i);
             #[cfg(windows)]
             {
                 builder = builder.item(&admin_i);
