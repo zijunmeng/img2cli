@@ -583,7 +583,10 @@ fn main() {
                 true,
                 None::<&str>,
             )?;
-            let builder = MenuBuilder::new(app).item(&show_i);
+            // mut is required on Windows (reassigned with the admin item below)
+            // and flagged unused on other platforms — hence the cfg_attr.
+            #[cfg_attr(not(windows), allow(unused_mut))]
+            let mut builder = MenuBuilder::new(app).item(&show_i);
             #[cfg(windows)]
             {
                 builder = builder.item(&admin_i);
