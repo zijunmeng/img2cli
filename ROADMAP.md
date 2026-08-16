@@ -4,6 +4,23 @@ This file tracks future architecture improvements, user experience features, and
 
 ---
 
+## 0. Road to v1.0.0 (decided 2026-08-16)
+
+**Goal: at v1.0.0, ship a feature-complete / highly stable / performant / lightweight product. ALL remaining debt is cleared before v0.4.5 (nothing slips to v0.5.x).**
+
+| Version | Theme | Contents |
+|---|---|---|
+| v0.4.1 | Feel + defects | 6-R state machine v3 · 6-S element detect + Tab cycling · IME×Direct real-test (force Copy per-host if conflicting) · host_policy → process-name detection · engineering cleanup (delete legacy `src/` CLI tree, orphan plugin-shell dep, dead_code, themed slider track) |
+| v0.4.2 | **Annotation editor** | arrow / pen / mosaic (incl. secure mode) / text / save-to-file + undo/redo + color/thickness — flameshot five-mechanism blueprint (`docs/REF_mining_20260816.md` §A) |
+| v0.4.3 | Pinning + multi-monitor | native-window pin (wispterm path + ShareX interaction spec, §C) · per-monitor capture & coordinate mapping |
+| v0.4.4 | Performance + intelligence | SSH keep-alive pool (<200ms uploads, M1-B) · Rust-native pre-emptive freeze (M1-A) · L-tail (cursor capture / focus-loss exit / sound) · OCR→markdown code block (Windows OCR Runtime first) |
+| v0.4.5 | Buffer | regression fixes only — the goal is for this version to be EMPTY |
+| v1.0.0 | Ship | code signing (⚠️ requires purchasing a certificate — user decision), final polish, docs |
+
+Open decisions: signing certificate budget (v1.0.0 stage); OCR scope = Windows OCR Runtime first, macOS Vision post-1.0 (assumed OK).
+
+---
+
 ## 1. Platform Direction & Build Strategy
 `img2cli` aims to remain a highly performant, single-binary background daemon with a lightweight, lazy-loaded configuration interface.
 * **Primary Target**: Windows (`x86_64-pc-windows-gnu` / setup installer and portable zip).
@@ -49,7 +66,7 @@ This file tracks future architecture improvements, user experience features, and
 
 ---
 
-## 4. Milestone 3: Annotation Editor (user-requested 2026-08-16 → v0.4.0)
+## 4. Milestone 3: Annotation Editor (user-requested 2026-08-16 → **v0.4.2**, Road to v1.0.0)
 
 ### A. Annotation Tools on the Selection
 * **Goal**: Snipaste-class editing inside the capture overlay's confirmed selection.
@@ -62,7 +79,7 @@ This file tracks future architecture improvements, user experience features, and
 
 ---
 
-## 5. Milestone 4: Screen Pinning / 贴图 (user-requested 2026-08-16 → v0.4.0+)
+## 5. Milestone 4: Screen Pinning / 贴图 (user-requested 2026-08-16 → **v0.4.3**, Road to v1.0.0)
 
 ### A. Pin the Capture to the Screen (Snipaste-style)
 * **Goal**: Float the confirmed crop as an always-on-top, draggable, resizable mini-window; Esc/× to close; optionally scroll-to-zoom.
