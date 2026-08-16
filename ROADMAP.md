@@ -165,17 +165,22 @@ This file tracks future architecture improvements, user experience features, and
 ### O. Overlay Selection State Machine: unconfirmed rects must not lock edit mode (v0.3.13 follow-up)
 * **Defect** (reported 2026-08-16, fixed differently in v0.3.15 after user feedback): the preloaded last-region proposal locked the overlay into move-edit mode with no confirmation. v0.3.15 removed the preload/proposal outright — the overlay always opens as a fresh crosshair; drawing works anywhere including inside an existing selection; Alt+drag inside keeps move.
 
-### P. Click-to-snap must be decided on mouseUP, not mouseDOWN (v0.3.15 follow-up)
-* **Defect** (reported 2026-08-16): inside a detected window, mousedown snaps the window instantly — so a drag starting inside a detected window can never draw a custom selection. Drawing from ANY point must always work before confirmation.
-* **Fix sketch (Snipaste semantics)**: mousedown ALWAYS starts a draw (remember the hovered window at press time in `downHover`); on mouseup, if the drawn rect is tiny (≈ click-in-place) AND `downHover` exists → adopt the hovered window as the selection; any real drag keeps the drawn rect. ~10 lines in capMouseDown/capMouseUp.
+### P. Click-to-snap must be decided on mouseUP, not mouseDOWN (v0.3.15 follow-up) — SHIPPED v0.4.0
+* mousedown always starts a draw; mouseup with a tiny rect + press-time hover snaps the window. Follow-ups moved to 6-R.
 
-### Q. Default host must be a FLAG on a target card, not a duplicated pinned card (v0.3.15 follow-up)
-* **Defect** (reported 2026-08-16): the pinned default-host card duplicates a host the user already has as a target (91_mengzijun twice), the 默认 badge heuristic (`target.host === config.ssh.host`) lights up multiple cards, and "Set Default" COPIES into config.ssh — later edits to the target diverge from the silently-stale default.
-* **Fix sketch (Orca model — one list, default is an attribute)**:
-  1. Remove the pinned config.ssh card from the UI entirely.
-  2. Add `default_target: Option<String>` (keyed by match_pattern) to AppConfig, or a boolean per TargetConfig; "Set Default" sets the flag (exactly one card wears the 默认 badge).
-  3. `DefaultSshResolver`: resolve the default from the flagged target first; fall back to legacy `config.ssh` when no flag exists (backward compat).
-  4. Migration on load: if `config.ssh.enabled` and a target matches its host → flag that target.
+### R. Overlay state machine v3: confirmed-vs-unconfirmed rules + hover feedback (v0.4.0 follow-up)
+* **Defects** (reported 2026-08-16):
+  1. After a click CONFIRMS a window, dragging inside the selection should MOVE it — v0.3.15's fix2 made inside-drag start a new draw; that was over-correction for the (now-removed) preload lock-in. Correct model: UNCONFIRMED = drag anywhere draws (incl. inside detected windows), quick click confirms; CONFIRMED = inside-drag moves, handles resize, outside-drag draws fresh.
+  2. Click-vs-drag threshold too small (4px) — jittery clicks become tiny draws instead of snapping the window. Raise to ~8-10px (Snipaste-ish).
+  3. Hover outline vanishes the moment the button is pressed (hoverRect nulled on first mousemove while drawing) — keep it visible during the hold until movement passes the threshold.
+* **Fix sketch**: rectMouseDown → plain = startMove (revert fix2's inside-draw), keep Alt variant as redundant; raise hasRect/draw threshold to 8px for the mouseup snap arbitration; hold hoverRect until draw actually exceeds threshold.
+
+### S. Snipaste-grade element detection + Tab cycling (v0.4.0 follow-up)
+* **Wanted**: Snipaste detects many window ELEMENTS (button/input level) under one cursor position and cycles them with Tab.
+* **Fix sketch**: backend — EnumChildWindows descent (greenshot's FindChildUnderPoint, ~3 levels, edge-rule: cursor on a rect edge returns the parent whole) exposing all candidates containing the cursor, Z-topmost-first (Windows-only via windows-sys; macOS via AX APIs later); frontend — candidate list at the cursor, Tab/Shift+Tab cycles the highlighted candidate, outline + size label track the active one.
+
+### Q. Default host must be a FLAG on a target card, not a duplicated pinned card (v0.3.15 follow-up) — SHIPPED v0.4.0
+* Pinned card removed; `is_default` flag on TargetConfig; DefaultSshResolver reads the flag with legacy config.ssh fallback; auto-migration seeds the flag.
 
 ### N. Merge Default-Host Form into the Card List (v0.3.13 follow-up)
 * **Issue** (reported 2026-08-16): the Hosts & Targets page has two host-editing surfaces — the top "default host" form (`config.ssh`) and the Dynamic Router Targets card list. The form is load-bearing (DefaultSsh fallback route — most uploads actually go through it; the keyring password lives on it; "Set Default" copies into it) but duplicative UI.
