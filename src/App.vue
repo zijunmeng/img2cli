@@ -1022,7 +1022,12 @@ const candidatesAt = (mx, my) =>
 const cycleCandidate = (dir) => {
   if (!cursorCands.value.length) return;
   candIdx.value = (candIdx.value + dir + cursorCands.value.length) % cursorCands.value.length;
-  hoverRect.value = cursorCands.value[candIdx.value] || null;
+  // Snipaste semantics: Tab SWITCHES the selection to the cycled candidate —
+  // it must work with or without an existing selection (a selection existing
+  // must never empty the candidate list).
+  const r = cursorCands.value[candIdx.value];
+  hoverRect.value = null;
+  if (r) rect.value = { x: r.x, y: r.y, w: r.w, h: r.h };
 };
 const hoverStyle = computed(() => {
   const r = hoverRect.value;
@@ -1104,9 +1109,10 @@ const startResize = (hd, e) => {
 };
 const capMouseMove = (e) => {
   if (!capAction.value) {
-    const cands = (!hasRect.value && winRects.value.length)
-      ? candidatesAt(e.clientX, e.clientY)
-      : [];
+    // Candidates are maintained regardless of an existing selection (Tab
+    // switches the selection); the passive hover OUTLINE only shows when
+    // nothing is selected yet.
+    const cands = winRects.value.length ? candidatesAt(e.clientX, e.clientY) : [];
     const changed =
       cands.length !== cursorCands.value.length ||
       cands.some((r, i) => r !== cursorCands.value[i]);
@@ -1114,7 +1120,7 @@ const capMouseMove = (e) => {
       cursorCands.value = cands;
       candIdx.value = 0;
     }
-    hoverRect.value = cursorCands.value[candIdx.value] || null;
+    hoverRect.value = (!hasRect.value && cursorCands.value[candIdx.value]) || null;
     return;
   }
   const mx = e.clientX, my = e.clientY;
