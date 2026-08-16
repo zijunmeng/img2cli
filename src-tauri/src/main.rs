@@ -292,6 +292,90 @@ fn write_logs(path: String, state: tauri::State<'_, daemon::DaemonState>) -> Res
     Ok(path)
 }
 
+/// Save the (possibly annotated) composite image to a file (v0.4.2 toolbar).
+#[tauri::command]
+fn write_image(path: String, data_url: String) -> Result<(), String> {
+    let bytes = crate::clipboard::decode_data_url_bytes(&data_url)?;
+    std::fs::write(&path, bytes).map_err(|e| format!("Failed to write image file: {}", e))
+}
+
+/// Copy the composite image itself (not the path) to the clipboard (v0.4.2).
+#[tauri::command]
+fn copy_image(data_url: String) -> Result<(), String> {
+    let img = crate::clipboard::decode_data_url_image(&data_url)?;
+    let mut cb = arboard::Clipboard::new().map_err(|e| format!("Failed to open clipboard: {}", e))?;
+    cb.set_image(arboard::ImageData {
+        width: img.width() as usize,
+        height: img.height() as usize,
+        bytes: std::borrow::Cow::Owned(img.into_raw()),
+    })
+    .map_err(|e| format!("Failed to set clipboard image: {}", e))
+}
+
+// ── Pin-to-screen windows (v0.4.2, ShareX interaction spec) ───────────────
+
+#[tauri::command]
+fn set_pin_image(state: tauri::State<'_, daemon::DaemonState>, id: u32, data_url: String) -> Result<(), String> {
+    state
+        .pins
+        .lock()
+        .map_err(|_| "pin store lock failed".to_string())?
+        .insert(id, data_url);
+    Ok(())
+}
+
+#[tauri::command]
+fn get_pin_image(state: tauri::State<'_, daemon::DaemonState>, id: u32) -> Result<String, String> {
+    state
+        .pins
+        .lock()
+        .map_err(|_| "pin store lock failed".to_string())?
+        .get(&id)
+        .cloned()
+        .ok_or_else(|| "no such pin".to_string())
+}
+
+/// Create the always-on-top, borderless pin window sized exactly to the crop.
+#[tauri::command]
+fn create_pin(app_handle: tauri::AppHandle, id: u32, w: f64, h: f64) -> Result<(), String> {
+    tauri::WebviewWindowBuilder::new(
+        &app_handle,
+        format!("pin-{}", id),
+        tauri::WebviewUrl::App(format!("index.html?pin={}", id).into()),
+    )
+    .decorations(false)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .resizable(false)
+    .inner_size(w.max(80.0), h.max(80.0))
+    .build()
+    .map_err(|e| format!("failed to create pin window: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+fn close_pin(app_handle: tauri::AppHandle, id: u32) {
+    if let Some(win) = app_handle.get_webview_window(&format!("pin-{}", id)) {
+        let _ = win.close();
+    }
+}
+
+#[tauri::command]
+fn resize_pin(app_handle: tauri::AppHandle, id: u32, w: f64, h: f64) {
+    if let Some(win) = app_handle.get_webview_window(&format!("pin-{}", id)) {
+        let _ = win.set_size(tauri::LogicalSize::new(w.max(80.0), h.max(80.0)));
+    }
+}
+
+/// Let the pin window be dragged by its content (custom command because pin
+/// windows aren't in the capability allowlist — core drag IPC would be denied).
+#[tauri::command]
+fn drag_pin(app_handle: tauri::AppHandle, id: u32) {
+    if let Some(win) = app_handle.get_webview_window(&format!("pin-{}", id)) {
+        let _ = win.start_dragging();
+    }
+}
+
 #[tauri::command]
 async fn test_connection(
     host: String,
@@ -646,6 +730,14 @@ fn main() {
             get_log_history,
             copy_logs,
             write_logs,
+            write_image,
+            copy_image,
+            set_pin_image,
+            get_pin_image,
+            create_pin,
+            close_pin,
+            resize_pin,
+            drag_pin,
             test_connection,
             load_ssh_config,
             set_ssh_password,

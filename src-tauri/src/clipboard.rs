@@ -5,6 +5,28 @@ use std::fs::File;
 use std::io::Cursor;
 use std::path::Path;
 
+/// Decode a `data:image/...;base64,<payload>` URL into raw PNG/JPEG bytes
+/// (annotation composites from the overlay arrive this way).
+pub fn decode_data_url_bytes(data_url: &str) -> Result<Vec<u8>, String> {
+    let b64 = data_url
+        .split_once(',')
+        .map(|(_, payload)| payload)
+        .ok_or("invalid data URL")?;
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD
+        .decode(b64.trim())
+        .map_err(|e| format!("base64 decode failed: {}", e))
+}
+
+/// Decode a data URL straight to an RGBA image (v0.4.2 annotated captures,
+/// copy-image, pin windows).
+pub fn decode_data_url_image(data_url: &str) -> Result<image::RgbaImage, String> {
+    let bytes = decode_data_url_bytes(data_url)?;
+    image::load_from_memory(&bytes)
+        .map(|d| d.to_rgba8())
+        .map_err(|e| format!("image decode failed: {}", e))
+}
+
 /// Peek the clipboard image without saving anything — used by the inject
 /// fast path (v0.3.15) to fingerprint whether it matches the last background
 /// upload. Returns None when the clipboard has no image.

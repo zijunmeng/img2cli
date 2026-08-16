@@ -214,34 +214,44 @@ pub fn capture_region(
     y: i32,
     w: u32,
     h: u32,
+    annotated: Option<String>,
 ) -> Result<(), String> {
     close_capture_overlay(&app_handle);
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     {
         use std::borrow::Cow;
-        
-        let full = {
-            let lock = state.captured_image.lock().map_err(|_| "Failed to lock captured image")?;
-            lock.clone().ok_or_else(|| "No captured image in memory".to_string())?
-        };
+        // v0.4.2: when the overlay composited annotations (canvas rasterized
+        // over the frozen frame), that data URL REPLACES the plain crop —
+        // clipboard, history and the background upload all use the annotated
+        // image from here on.
+        let cropped = match annotated {
+            Some(data_url) => crate::clipboard::decode_data_url_image(&data_url)
+                .map_err(|e| format!("annotated composite invalid: {}", e))?,
+            None => {
+                let full = {
+                    let lock = state.captured_image.lock().map_err(|_| "Failed to lock captured image")?;
+                    lock.clone().ok_or_else(|| "No captured image in memory".to_string())?
+                };
 
-        let scale = {
-            let monitors = xcap::Monitor::all().map_err(|e| format!("List monitors: {e}"))?;
-            let mon = monitors.first().ok_or_else(|| "No monitor found".to_string())?;
-            mon.scale_factor().unwrap_or(1.0)
-        };
+                let scale = {
+                    let monitors = xcap::Monitor::all().map_err(|e| format!("List monitors: {e}"))?;
+                    let mon = monitors.first().ok_or_else(|| "No monitor found".to_string())?;
+                    mon.scale_factor().unwrap_or(1.0)
+                };
 
-        // Selection coords are CSS px; xcap image is physical px (× scale factor).
-        let cx = ((x as f32) * scale).max(0.0) as u32;
-        let cy = ((y as f32) * scale).max(0.0) as u32;
-        let cw = (((w as f32) * scale) as u32)
-            .max(1)
-            .min(full.width().saturating_sub(cx));
-        let ch = (((h as f32) * scale) as u32)
-            .max(1)
-            .min(full.height().saturating_sub(cy));
-            
-        let cropped = image::imageops::crop_imm(&full, cx, cy, cw, ch).to_image();
+                // Selection coords are CSS px; xcap image is physical px (× scale factor).
+                let cx = ((x as f32) * scale).max(0.0) as u32;
+                let cy = ((y as f32) * scale).max(0.0) as u32;
+                let cw = (((w as f32) * scale) as u32)
+                    .max(1)
+                    .min(full.width().saturating_sub(cx));
+                let ch = (((h as f32) * scale) as u32)
+                    .max(1)
+                    .min(full.height().saturating_sub(cy));
+
+                image::imageops::crop_imm(&full, cx, cy, cw, ch).to_image()
+            }
+        };
         // v0.3.15 capture-then-upload: keep a copy for the background upload
         // job (the clipboard takes ownership of the original buffer below).
         let for_upload = cropped.clone();
@@ -305,7 +315,7 @@ pub fn capture_region(
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
-        let _ = (state, x, y, w, h);
+        let _ = (state, x, y, w, h, &annotated);
         Err("Screenshot capture is not supported on this platform".to_string())
     }
 }

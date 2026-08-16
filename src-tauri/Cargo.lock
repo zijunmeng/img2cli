@@ -2536,6 +2536,7 @@ name = "img2cli"
 version = "0.4.1"
 dependencies = [
  "arboard",
+ "base64 0.22.1",
  "chrono",
  "enigo",
  "image",

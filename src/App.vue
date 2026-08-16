@@ -3,8 +3,17 @@
   <div v-if="captureMode" class="fixed inset-0 z-[9999] cursor-crosshair select-none"
        @mousedown="capMouseDown" @mousemove="capMouseMove" @mouseup="capMouseUp">
     <img v-if="capturedImageSrc" :src="capturedImageSrc" class="absolute inset-0 w-full h-full object-cover pointer-events-none" />
+    <!-- Annotation canvas (v0.4.2): full-overlay, pointer-transparent, clipped
+         to the selection; annotations live in overlay coordinates so they stay
+         glued to the frozen frame when the selection moves. -->
+    <canvas ref="annotCanvas" class="absolute inset-0 w-full h-full pointer-events-none z-[10001]"></canvas>
+    <!-- In-progress text editor (text tool) -->
+    <textarea v-if="editingText" v-model="editingText.value"
+      class="absolute z-[10005] bg-transparent outline-none border border-dashed border-white/60 px-0.5 py-0 resize-none overflow-hidden whitespace-pre"
+      :style="{ left: editingText.x + 'px', top: editingText.y + 'px', color: toolColor, fontSize: textFontSize + 'px', lineHeight: textFontSize + 'px', minWidth: '80px', height: (textFontSize + 6) + 'px', fontWeight: 600 }"
+      @mousedown.stop @keydown.stop="textKeydown" @blur="commitText"></textarea>
     <!-- Key guide, Snipaste-style bottom-left panel (one key per line) -->
-    <div v-if="config.capture_show_hints" class="absolute bottom-5 left-5 bg-black/70 text-white/90 text-[11px] leading-relaxed px-3.5 py-2.5 rounded-lg pointer-events-none shadow-lg z-[10000] font-mono space-y-0.5">
+    <div v-if="config.capture_show_hints && !editingText" class="absolute bottom-5 left-5 bg-black/70 text-white/90 text-[11px] leading-relaxed px-3.5 py-2.5 rounded-lg pointer-events-none shadow-lg z-[10006] font-mono space-y-0.5">
       <div v-for="(line, i) in hintLines" :key="i">{{ line }}</div>
     </div>
     <!-- Auto-detected window under the cursor (6-J): outline + size label -->
@@ -12,19 +21,52 @@
       <span class="absolute -top-6 left-0 bg-[#2997ff] text-white text-[11px] px-1.5 py-0.5 rounded-md font-mono whitespace-nowrap shadow-lg">{{ Math.round(hoverRect.w) }} × {{ Math.round(hoverRect.h) }}</span>
     </div>
     <div v-if="hasRect" :style="[rectStyle, selBorderStyle]" @mousedown.stop="rectMouseDown"
-         class="absolute border-solid border-[#2997ff] box-border cursor-move z-[10000]">
+         :class="['absolute border-solid border-[#2997ff] box-border z-[10000]', activeTool === 'select' ? 'cursor-move' : 'cursor-crosshair']">
       <div v-for="hd in handles" :key="hd" :style="handleStyle(hd)" :class="handleCursorClass(hd)"
            @mousedown.stop.prevent="startResize(hd, $event)"
            class="absolute w-2.5 h-2.5 bg-white border border-[#2997ff] rounded-sm shadow"></div>
+      <!-- Toolbar: annotation tools + actions (Snipaste-style icon buttons with
+           hover tooltips). -->
       <div :style="toolbarStyle" @mousedown.stop
-           class="absolute flex items-center gap-1 bg-[#1a1a1a]/95 rounded-md px-1.5 py-1 text-white text-xs shadow-lg">
-        <span class="px-1 tabular-nums text-white/80">{{ Math.round(rect.w) }} × {{ Math.round(rect.h) }}</span>
-        <button @click.stop="confirmRect" class="px-2 py-0.5 rounded bg-[#2997ff] hover:brightness-110 font-medium">{{ t('✓ Save') }}</button>
-        <button @click.stop="cancelRect" class="px-1.5 py-0.5 rounded hover:bg-white/15">✕</button>
+           class="absolute flex items-center gap-0.5 bg-[#1a1a1a]/95 backdrop-blur rounded-lg px-1.5 py-1 text-white shadow-xl">
+        <span class="px-1 tabular-nums text-white/80 text-xs">{{ Math.round(rect.w) }} × {{ Math.round(rect.h) }}</span>
+        <span class="w-px h-4 bg-white/20 mx-0.5"></span>
+        <button v-for="tl in toolButtons" :key="tl.id" @click.stop="setTool(tl.id)"
+                :title="tl.tip" :aria-label="tl.tip"
+                :class="['w-7 h-7 rounded-md text-sm flex items-center justify-center transition-colors', activeTool === tl.id ? 'bg-[#2997ff] text-white' : 'hover:bg-white/15 text-white/90']">{{ tl.icon }}</button>
+        <span class="w-px h-4 bg-white/20 mx-0.5"></span>
+        <button @click.stop="undoAnnot" :title="t('Undo') + ' (Ctrl+Z)'" class="w-7 h-7 rounded-md hover:bg-white/15 text-white/90 text-sm flex items-center justify-center">↶</button>
+        <button @click.stop="redoAnnot" :title="t('Redo') + ' (Ctrl+Y)'" class="w-7 h-7 rounded-md hover:bg-white/15 text-white/90 text-sm flex items-center justify-center">↷</button>
+        <button @click.stop="colorMenu = !colorMenu" :title="t('Color')"
+                class="w-7 h-7 rounded-md hover:bg-white/15 flex items-center justify-center">
+          <span class="w-3.5 h-3.5 rounded-full border border-white/70" :style="{ backgroundColor: toolColor }"></span>
+        </button>
+        <div v-if="colorMenu" class="absolute top-8 left-0 bg-[#1a1a1a]/95 backdrop-blur rounded-lg p-1.5 flex gap-1 shadow-xl" @mousedown.stop>
+          <button v-for="c in palette" :key="c" @click.stop="toolColor = c; colorMenu = false"
+                  class="w-5 h-5 rounded-full border border-white/40 hover:scale-110 transition-transform" :style="{ backgroundColor: c }"></button>
+        </div>
+        <div class="flex items-center gap-0.5 px-0.5" :title="t('Thickness')">
+          <button @click.stop="toolSize = Math.max(1, toolSize - 1)" class="w-5 h-7 rounded hover:bg-white/15 text-xs">−</button>
+          <span class="text-[11px] w-4 text-center tabular-nums">{{ toolSize }}</span>
+          <button @click.stop="toolSize = Math.min(8, toolSize + 1)" class="w-5 h-7 rounded hover:bg-white/15 text-xs">+</button>
+        </div>
+        <span class="w-px h-4 bg-white/20 mx-0.5"></span>
+        <button @click.stop="actionPin" :title="t('Pin to screen')" class="w-7 h-7 rounded-md hover:bg-white/15 text-sm flex items-center justify-center">📌</button>
+        <button @click.stop="actionSave" :title="t('Save to file')" class="w-7 h-7 rounded-md hover:bg-white/15 text-sm flex items-center justify-center">💾</button>
+        <button @click.stop="actionCopy" :title="t('Copy image to clipboard')" class="w-7 h-7 rounded-md hover:bg-white/15 text-sm flex items-center justify-center">📋</button>
+        <button @click.stop="confirmRect" :title="t('Upload + inject')" class="px-2 h-7 rounded-md bg-[#2997ff] hover:brightness-110 text-xs font-medium flex items-center">✓</button>
+        <button @click.stop="cancelRect" :title="t('Cancel')" class="w-6 h-7 rounded-md hover:bg-white/15 text-xs">✕</button>
       </div>
     </div>
   </div>
-  <div 
+  <!-- Pin-to-screen window (index.html?pin=ID) -->
+  <div v-else-if="pinMode" class="fixed inset-0 overflow-hidden select-none bg-transparent"
+       @contextmenu.prevent="closePin" @dblclick="closePin" @wheel.prevent="pinZoom" @mousemove="pinHover = true">
+    <img v-if="pinImg" :src="pinImg" draggable="false"
+         class="w-full h-full object-fill cursor-move" @mousedown.stop="startPinDrag" />
+    <div v-if="pinHover" class="absolute top-1 right-1 text-[10px] text-white/0 select-none pointer-events-none">·</div>
+  </div>
+  <div
     v-else 
     :style="{
       '--bg-app': currentTheme.bgApp,
@@ -1064,6 +1106,314 @@ const cycleHistory = (dir) => {
   applyHistoryRect();
 };
 
+// ── Annotation editor (v0.4.2) — flameshot's value-object model ───────────
+// Annotations are plain data objects in OVERLAY coordinates (glued to the
+// frozen frame, not the selection, so moving the selection never smears them).
+// drawObjects() is the single renderer used by BOTH the live canvas (clipped
+// to the selection) and the confirm-time composite at full physical res.
+const activeTool = ref('select'); // select | arrow | pen | marker | mosaic | text | rect | ellipse | eraser
+const annots = ref([]);
+const undoStack = ref([]);
+const redoStack = ref([]);
+const toolColor = ref('#ff4d4f');
+const toolSize = ref(3); // 1..8 — shared by line width / mosaic blocks / text size
+const activeAnnot = ref(null); // in-progress object while dragging
+const editingText = ref(null); // { x, y, value }
+const colorMenu = ref(false);
+const annotCanvas = ref(null);
+const frozenImg = new Image();
+const palette = ['#ff4d4f', '#faad14', '#52c41a', '#1890ff', '#722ed1', '#ffffff', '#000000'];
+const textFontSize = computed(() => 12 + toolSize.value * 3);
+const toolButtons = computed(() => [
+  { id: 'select', icon: '⬉', tip: t('Select / move') },
+  { id: 'arrow', icon: '➶', tip: t('Arrow') },
+  { id: 'pen', icon: '✏️', tip: t('Pen') },
+  { id: 'marker', icon: '🖍️', tip: t('Marker (highlight)') },
+  { id: 'mosaic', icon: '▦', tip: t('Mosaic') },
+  { id: 'text', icon: 'T', tip: t('Text') },
+  { id: 'rect', icon: '▭', tip: t('Rectangle') },
+  { id: 'ellipse', icon: '◯', tip: t('Ellipse') },
+  { id: 'eraser', icon: '⌫', tip: t('Eraser (click an object)') },
+]);
+
+const pushUndo = () => {
+  undoStack.value.push(annots.value.slice());
+  if (undoStack.value.length > 50) undoStack.value.shift();
+  redoStack.value = [];
+};
+const undoAnnot = () => {
+  if (!undoStack.value.length) return;
+  redoStack.value.push(annots.value.slice());
+  annots.value = undoStack.value.pop();
+  redrawAnnots();
+};
+const redoAnnot = () => {
+  if (!redoStack.value.length) return;
+  undoStack.value.push(annots.value.slice());
+  annots.value = redoStack.value.pop();
+  redrawAnnots();
+};
+const setTool = (id) => {
+  if (editingText.value) commitText();
+  activeTool.value = activeTool.value === id && id !== 'select' ? 'select' : id;
+  colorMenu.value = false;
+};
+
+// Single renderer for every object type (flameshot's process() contract).
+const drawObjects = (ctx, list) => {
+  for (const a of list) {
+    ctx.strokeStyle = a.color;
+    ctx.fillStyle = a.color;
+    ctx.lineWidth = a.size;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    if (a.type === 'arrow') {
+      const dx = a.x2 - a.x1, dy = a.y2 - a.y1;
+      const len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len, uy = dy / len;
+      const headW = 10 + a.size * 2, headL = Math.min(18 + a.size * 4, len * 0.6);
+      const bx = a.x2 - ux * headL, by = a.y2 - uy * headL; // head base
+      ctx.beginPath();
+      ctx.moveTo(a.x1, a.y1);
+      ctx.lineTo(bx, by);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(a.x2, a.y2);
+      ctx.lineTo(bx - uy * headW / 2, by + ux * headW / 2);
+      ctx.lineTo(bx + uy * headW / 2, by - ux * headW / 2);
+      ctx.closePath();
+      ctx.fill();
+    } else if (a.type === 'pen' || a.type === 'marker') {
+      ctx.save();
+      if (a.type === 'marker') {
+        ctx.globalCompositeOperation = 'multiply';
+        ctx.globalAlpha = 0.85;
+        ctx.lineWidth = a.size * 4;
+      }
+      ctx.beginPath();
+      a.pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+      ctx.stroke();
+      ctx.restore();
+    } else if (a.type === 'rect') {
+      ctx.beginPath();
+      ctx.rect(a.x, a.y, a.w, a.h);
+      ctx.stroke();
+    } else if (a.type === 'ellipse') {
+      ctx.beginPath();
+      ctx.ellipse(a.x + a.w / 2, a.y + a.h / 2, Math.abs(a.w / 2), Math.abs(a.h / 2), 0, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (a.type === 'text') {
+      ctx.font = `600 ${a.fontSize}px system-ui, sans-serif`;
+      ctx.textBaseline = 'top';
+      a.text.split('\n').forEach((line, i) => ctx.fillText(line, a.x, a.y + i * (a.fontSize + 2)));
+    } else if (a.type === 'mosaic' && frozenImg.complete && frozenImg.naturalWidth > 0) {
+      // Two-step pixelate: downscale to a tiny offscreen, upscale with
+      // smoothing off. Source coords are physical (natural size = monitor px).
+      const dpr = window.devicePixelRatio || 1;
+      const block = Math.max(4, a.size * 3); // css px per block
+      const cols = Math.max(1, Math.round(a.w / block));
+      const rows = Math.max(1, Math.round(a.h / block));
+      const off = document.createElement('canvas');
+      off.width = cols; off.height = rows;
+      const octx = off.getContext('2d');
+      octx.drawImage(frozenImg, a.x * dpr, a.y * dpr, a.w * dpr, a.h * dpr, 0, 0, cols, rows);
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(off, 0, 0, cols, rows, a.x, a.y, a.w, a.h);
+      ctx.imageSmoothingEnabled = true;
+    }
+  }
+};
+
+// Live canvas: full-overlay size at devicePixelRatio, clipped to the selection.
+const redrawAnnots = () => {
+  const c = annotCanvas.value;
+  if (!c) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = window.innerWidth, H = window.innerHeight;
+  if (c.width !== Math.round(W * dpr) || c.height !== Math.round(H * dpr)) {
+    c.width = Math.round(W * dpr);
+    c.height = Math.round(H * dpr);
+  }
+  const ctx = c.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  const all = activeAnnot.value ? [...annots.value, activeAnnot.value] : annots.value;
+  if (!all.length || !hasRect.value) return;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(rect.value.x, rect.value.y, rect.value.w, rect.value.h);
+  ctx.clip();
+  drawObjects(ctx, all);
+  ctx.restore();
+};
+
+// Geometric hit-test for the object eraser (topmost first).
+const distToSeg = (px, py, x1, y1, x2, y2) => {
+  const dx = x2 - x1, dy = y2 - y1;
+  const l2 = dx * dx + dy * dy || 1;
+  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / l2));
+  return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+};
+const hitAnnot = (px, py) => {
+  for (let i = annots.value.length - 1; i >= 0; i--) {
+    const a = annots.value[i];
+    const pad = Math.max(5, a.size * 1.6);
+    if (a.type === 'pen' || a.type === 'marker') {
+      for (let s = 1; s < a.pts.length; s++) {
+        if (distToSeg(px, py, a.pts[s - 1].x, a.pts[s - 1].y, a.pts[s].x, a.pts[s].y) <= pad) return i;
+      }
+    } else if (a.type === 'arrow') {
+      if (distToSeg(px, py, a.x1, a.y1, a.x2, a.y2) <= pad) return i;
+    } else if (a.type === 'rect' || a.type === 'ellipse' || a.type === 'mosaic') {
+      const x0 = Math.min(a.x, a.x + a.w), x1 = Math.max(a.x, a.x + a.w);
+      const y0 = Math.min(a.y, a.y + a.h), y1 = Math.max(a.y, a.y + a.h);
+      if (px >= x0 - pad && px <= x1 + pad && py >= y0 - pad && py <= y1 + pad) return i;
+    } else if (a.type === 'text') {
+      if (px >= a.x - 4 && px <= a.x + (a.tw || 80) && py >= a.y - 4 && py <= a.y + (a.text.split('\n').length * (a.fontSize + 2) + 4)) return i;
+    }
+  }
+  return -1;
+};
+
+// A draw tool pressed inside the selection starts an annotation.
+const annotMouseDown = (e) => {
+  const x = e.clientX, y = e.clientY;
+  if (activeTool.value === 'eraser') {
+    const i = hitAnnot(x, y);
+    if (i >= 0) { pushUndo(); annots.value.splice(i, 1); redrawAnnots(); }
+    return;
+  }
+  if (activeTool.value === 'text') {
+    if (editingText.value) commitText();
+    editingText.value = { x, y, value: '' };
+    nextTick(() => document.querySelector('textarea')?.focus());
+    return;
+  }
+  capAction.value = 'annotate';
+  const common = { color: toolColor.value, size: toolSize.value };
+  if (activeTool.value === 'pen' || activeTool.value === 'marker') {
+    activeAnnot.value = { type: activeTool.value, pts: [{ x, y }], ...common };
+  } else if (activeTool.value === 'arrow') {
+    activeAnnot.value = { type: 'arrow', x1: x, y1: y, x2: x, y2: y, ...common };
+  } else {
+    activeAnnot.value = { type: activeTool.value, x, y, w: 0, h: 0, ...common };
+  }
+};
+const annotMouseMove = (e) => {
+  const a = activeAnnot.value;
+  if (!a) return;
+  if (a.type === 'pen' || a.type === 'marker') a.pts.push({ x: e.clientX, y: e.clientY });
+  else if (a.type === 'arrow') { a.x2 = e.clientX; a.y2 = e.clientY; }
+  else { a.w = e.clientX - a.x; a.h = e.clientY - a.y; }
+  redrawAnnots();
+};
+const annotMouseUp = () => {
+  const a = activeAnnot.value;
+  activeAnnot.value = null;
+  if (!a) return;
+  const valid =
+    (a.type === 'pen' || a.type === 'marker') ? a.pts.length > 1 :
+    a.type === 'arrow' ? Math.hypot(a.x2 - a.x1, a.y2 - a.y1) > 4 :
+    a.type === 'rect' || a.type === 'ellipse' || a.type === 'mosaic' ? Math.abs(a.w) > 4 && Math.abs(a.h) > 4 : false;
+  if (valid) {
+    if (a.type === 'rect' || a.type === 'ellipse' || a.type === 'mosaic') {
+      if (a.w < 0) { a.x += a.w; a.w = -a.w; }
+      if (a.h < 0) { a.y += a.h; a.h = -a.h; }
+    }
+    pushUndo();
+    annots.value.push(a);
+  }
+  redrawAnnots();
+};
+
+// Text tool: Enter commits (unless Shift for newline), Esc discards.
+const textKeydown = (e) => {
+  e.stopPropagation();
+  if (e.key === 'Escape') { editingText.value = null; return; }
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitText(); }
+};
+const commitText = () => {
+  const ed = editingText.value;
+  editingText.value = null;
+  if (!ed || !ed.value.trim()) return;
+  const a = { type: 'text', x: ed.x, y: ed.y, text: ed.value, color: toolColor.value, fontSize: textFontSize.value };
+  // measure bbox for the eraser hit-test
+  const c = annotCanvas.value;
+  if (c) {
+    const ctx = c.getContext('2d');
+    ctx.font = `600 ${a.fontSize}px system-ui, sans-serif`;
+    a.tw = Math.max(...a.text.split('\n').map((l) => ctx.measureText(l).width));
+  }
+  pushUndo();
+  annots.value.push(a);
+  redrawAnnots();
+};
+
+// Composite the selection (frozen frame + annotations) at PHYSICAL res.
+const compositeRegion = () => {
+  const dpr = window.devicePixelRatio || 1;
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(rect.value.w * dpr));
+  c.height = Math.max(1, Math.round(rect.value.h * dpr));
+  const ctx = c.getContext('2d');
+  ctx.drawImage(frozenImg,
+    rect.value.x * dpr, rect.value.y * dpr, c.width, c.height,
+    0, 0, c.width, c.height);
+  ctx.scale(dpr, dpr);
+  ctx.translate(-rect.value.x, -rect.value.y);
+  drawObjects(ctx, annots.value);
+  return c.toDataURL('image/png');
+};
+
+// Toolbar actions — all operate on the composited region.
+const closeOverlay = async () => { try { await invoke('cancel_capture'); } catch (_) {} };
+const actionCopy = async () => {
+  try {
+    await invoke('copy_image', { dataUrl: annots.value.length ? compositeRegion() : plainRegionDataUrl() });
+  } catch (_) {}
+  closeOverlay();
+};
+const actionSave = async () => {
+  try {
+    const stamp = new Date().toISOString().slice(0, 19).replaceAll(/[-:T]/g, '');
+    const path = await saveDialog({
+      defaultPath: `img2cli-${stamp}.png`,
+      filters: [{ name: 'PNG', extensions: ['png'] }],
+    });
+    if (!path) return;
+    await invoke('write_image', { path, dataUrl: annots.value.length ? compositeRegion() : plainRegionDataUrl() });
+  } catch (err) { console.error('save failed:', err); }
+  closeOverlay();
+};
+const actionPin = async () => {
+  try {
+    const dataUrl = annots.value.length ? compositeRegion() : plainRegionDataUrl();
+    const id = Date.now() % 1_000_000_000;
+    await invoke('set_pin_image', { id, dataUrl });
+    await invoke('create_pin', { id, w: Math.max(80, rect.value.w), h: Math.max(80, rect.value.h) });
+  } catch (err) { console.error('pin failed:', err); }
+  closeOverlay();
+};
+// No annotations → the plain crop equals the frozen-frame region; composite it
+// anyway so copy/save/pin share one code path at full physical res.
+const plainRegionDataUrl = () => compositeRegion();
+
+// Pin window page (?pin=ID).
+const pinMode = ref(false);
+const pinImg = ref('');
+const pinIdNum = ref(0);
+const pinBase = ref({ w: 0, h: 0 });
+const pinScale = ref(1);
+const pinHover = ref(false);
+const closePin = () => { try { invoke('close_pin', { id: pinIdNum.value }); } catch (_) {} };
+const startPinDrag = () => { try { invoke('drag_pin', { id: pinIdNum.value }); } catch (_) {} };
+const pinZoom = (e) => {
+  pinScale.value = Math.min(5, Math.max(0.2, pinScale.value * (e.deltaY < 0 ? 1.1 : 0.9)));
+  try {
+    invoke('resize_pin', { id: pinIdNum.value, w: Math.max(80, pinBase.value.w * pinScale.value), h: Math.max(80, pinBase.value.h * pinScale.value) });
+  } catch (_) {}
+};
+
 // Snipaste-style key guide lines for the bottom-left overlay panel.
 const hintLines = computed(() => [
   t('Drag to select · Click a window to snap'),
@@ -1095,9 +1445,12 @@ const startDraw = (e) => {
   rect.value = { x: e.clientX, y: e.clientY, w: 0, h: 0 };
   capOrigin.value = { mx: e.clientX, my: e.clientY, rect: null };
 };
-// A confirmed selection drags to MOVE by default (6-R: the click that snapped
-// or the drag that drew it IS the confirmation); outside-draw draws fresh.
-const rectMouseDown = (e) => startMove(e);
+// A confirmed selection: the SELECT tool drags to move (6-R); a draw tool or
+// the eraser starts annotating instead. Handles keep resizing either way.
+const rectMouseDown = (e) => {
+  if (activeTool.value === 'select') { startMove(e); return; }
+  annotMouseDown(e);
+};
 const startMove = (e) => {
   capAction.value = 'move';
   capOrigin.value = { mx: e.clientX, my: e.clientY, rect: { ...rect.value } };
@@ -1123,6 +1476,7 @@ const capMouseMove = (e) => {
     hoverRect.value = (!hasRect.value && cursorCands.value[candIdx.value]) || null;
     return;
   }
+  if (capAction.value === 'annotate') { annotMouseMove(e); return; }
   const mx = e.clientX, my = e.clientY;
   const winW = window.innerWidth, winH = window.innerHeight;
   if (capAction.value === 'draw') {
@@ -1148,6 +1502,7 @@ const capMouseMove = (e) => {
   }
 };
 const capMouseUp = () => {
+  if (capAction.value === 'annotate') { annotMouseUp(); capAction.value = null; return; }
   capAction.value = null;
   // 6-P/6-R: a sub-threshold press-release (jitter-safe 8px) over a detected
   // window snaps that window; any real drag keeps the drawn selection.
@@ -1162,8 +1517,12 @@ const capMouseUp = () => {
 const confirmRect = async () => {
   const r = rect.value;
   if (r.w < 4 || r.h < 4) { try { await invoke('cancel_capture'); } catch (_) {} return; }
-  try { await invoke('capture_region', { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h) }); }
-  catch (_) { try { await invoke('cancel_capture'); } catch (_) {} }
+  try {
+    await invoke('capture_region', {
+      x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h),
+      annotated: annots.value.length ? compositeRegion() : undefined,
+    });
+  } catch (_) { try { await invoke('cancel_capture'); } catch (_) {} }
 };
 const cancelRect = async () => { try { await invoke('cancel_capture'); } catch (_) {} };
 
@@ -1319,10 +1678,30 @@ const scrollLogsToBottom = () => {
 
 onMounted(() => {
   const params = new URLSearchParams(window.location.search);
+  if (params.get('pin') !== null) {
+    // Pin-to-screen window: exact-fit image, drag to move, wheel zoom,
+    // right-click / double-click close (ShareX interaction spec).
+    pinMode.value = true;
+    pinIdNum.value = Number(params.get('pin')) || 0;
+    invoke('get_pin_image', { id: pinIdNum.value })
+      .then(async (dataUrl) => {
+        pinImg.value = dataUrl;
+        await nextTick();
+        pinBase.value = { w: window.innerWidth, h: window.innerHeight };
+      })
+      .catch((e) => console.error('pin image load failed:', e));
+    return;
+  }
   if (params.get('capture') === '1') {
     // This webview is the region-capture overlay (loaded by the screenshot hotkey).
     captureMode.value = true;
     window.addEventListener('keydown', (e) => {
+      // While the text editor is open it owns all keys (except what its own
+      // handler defers); Esc there discards the editor, not the overlay.
+      if (editingText.value) return;
+      // v0.4.2 annotation shortcuts.
+      if (e.ctrlKey && e.code === 'KeyZ') { e.preventDefault(); e.shiftKey ? redoAnnot() : undoAnnot(); return; }
+      if (e.ctrlKey && e.code === 'KeyY') { e.preventDefault(); redoAnnot(); return; }
       if (e.key === 'Escape') invoke('cancel_capture');
       else if (e.key === 'Enter' && hasRect.value) confirmRect();
       // v0.4.1 keys — matched via e.code (physical key): with a CJK IME
@@ -1345,6 +1724,14 @@ onMounted(() => {
     invoke('get_captured_image')
       .then(async (src) => {
         capturedImageSrc.value = src;
+        // The annotation engine needs the frozen frame as a drawable Image
+        // (mosaic sampling + compositing). Fresh session state each time.
+        frozenImg.src = src;
+        annots.value = [];
+        undoStack.value = [];
+        redoStack.value = [];
+        activeTool.value = 'select';
+        redrawAnnots();
         // Capture options + auto window detection + last-region preload
         // (6-J/6-L), fetched before the reveal so nothing pops in.
         try {

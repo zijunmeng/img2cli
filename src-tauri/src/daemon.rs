@@ -55,6 +55,8 @@ pub struct DaemonState {
     /// inject hotkey skip re-uploading when the clipboard still holds the
     /// exact image that was already uploaded.
     pub last_upload: Arc<std::sync::Mutex<Option<LastUpload>>>,
+    /// Pin-to-screen windows (v0.4.2): pin id → composited image data URL.
+    pub pins: Arc<std::sync::Mutex<std::collections::HashMap<u32, String>>>,
 }
 
 /// A completed background upload, keyed by the fingerprint of the raw image.
@@ -183,6 +185,7 @@ pub fn start_daemon(app_handle: AppHandle, config: AppConfig) -> DaemonState {
         captured_image: Arc::new(std::sync::Mutex::new(None)),
         window_rects: Arc::new(std::sync::Mutex::new(Vec::new())),
         last_upload: Arc::new(std::sync::Mutex::new(None)),
+        pins: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
     }
 }
 
