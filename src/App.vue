@@ -3,13 +3,16 @@
   <div v-if="captureMode" class="fixed inset-0 z-[9999] cursor-crosshair select-none"
        @mousedown="capMouseDown" @mousemove="capMouseMove" @mouseup="capMouseUp">
     <img v-if="capturedImageSrc" :src="capturedImageSrc" class="absolute inset-0 w-full h-full object-cover pointer-events-none" />
-    <div v-if="!hasRect && config.capture_show_hints" class="absolute top-5 left-1/2 -translate-x-1/2 text-white text-sm bg-black/70 px-4 py-1.5 rounded-full pointer-events-none shadow-lg z-[10000]">{{ t('Drag to select · Click a window to snap · Tab cycles elements · Shift+R last region · Enter to save · Esc to cancel') }}</div>
+    <!-- Key guide, Snipaste-style bottom-left panel (one key per line) -->
+    <div v-if="config.capture_show_hints" class="absolute bottom-5 left-5 bg-black/70 text-white/90 text-[11px] leading-relaxed px-3.5 py-2.5 rounded-lg pointer-events-none shadow-lg z-[10000] font-mono space-y-0.5">
+      <div v-for="(line, i) in hintLines" :key="i">{{ line }}</div>
+    </div>
     <!-- Auto-detected window under the cursor (6-J): outline + size label -->
     <div v-if="hoverRect && !hasRect" :style="hoverStyle" class="absolute pointer-events-none z-[10000]">
       <span class="absolute -top-6 left-0 bg-[#2997ff] text-white text-[11px] px-1.5 py-0.5 rounded-md font-mono whitespace-nowrap shadow-lg">{{ Math.round(hoverRect.w) }} × {{ Math.round(hoverRect.h) }}</span>
     </div>
     <div v-if="hasRect" :style="[rectStyle, selBorderStyle]" @mousedown.stop="rectMouseDown"
-         class="absolute border-solid border-[#2997ff] box-border cursor-crosshair z-[10000]">
+         class="absolute border-solid border-[#2997ff] box-border cursor-move z-[10000]">
       <div v-for="hd in handles" :key="hd" :style="handleStyle(hd)" :class="handleCursorClass(hd)"
            @mousedown.stop.prevent="startResize(hd, $event)"
            class="absolute w-2.5 h-2.5 bg-white border border-[#2997ff] rounded-sm shadow"></div>
@@ -1055,6 +1058,15 @@ const cycleHistory = (dir) => {
   historyCursor.value = historyCursor.value < 0 ? 0 : (historyCursor.value + dir + n) % n;
   applyHistoryRect();
 };
+
+// Snipaste-style key guide lines for the bottom-left overlay panel.
+const hintLines = computed(() => [
+  t('Drag to select · Click a window to snap'),
+  t('Tab / Shift+Tab cycle elements'),
+  t('Shift+R last region · `,` `.` history'),
+  t('WASD move cursor 1px'),
+  t('Enter save · Esc cancel'),
+]);
 
 // Selection appearance knobs (6-L).
 const selBorderStyle = computed(() => ({

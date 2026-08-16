@@ -129,8 +129,12 @@ export const ZH = {
   'set as the default SSH host.': '已设为默认 SSH 主机。',
   'Saved target, but password not stored:': '目标已保存，但密码未存储：',
   // ── capture options + overlay (6-J/6-L) ──
-  'Drag to select · Click a window to snap · Tab cycles elements · Shift+R last region · Enter to save · Esc to cancel':
-    '拖拽选择 · 点击选中窗口 · Tab 切换元素 · Shift+R 上次区域 · , . 历史 · WASD 微调 · Enter 保存 · Esc 取消',
+  // ── overlay key guide (bottom-left panel, one per line) ──
+  'Drag to select · Click a window to snap': '拖拽选择区域 · 点击选中窗口',
+  'Tab / Shift+Tab cycle elements': 'Tab / Shift+Tab 切换窗口元素',
+  'Shift+R last region · `,` `.` history': 'Shift+R 上次区域 · `,` `.` 翻看历史',
+  'WASD move cursor 1px': 'WASD 移动光标 1 像素',
+  'Enter save · Esc cancel': 'Enter 保存 · Esc 取消',
   'Capture Options': '截屏选项',
   'Auto-detect windows': '自动识别窗口',
   'Click to snap the window under the cursor': '点击即可选中光标所在窗口',
