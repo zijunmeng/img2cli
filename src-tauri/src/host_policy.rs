@@ -20,10 +20,10 @@
 //! contract explicitly forbids injection-mode decisions, so host policy lives
 //! here as a pure lookup called at injection time (`job::process_job`).
 //!
-//! Detection is window-title-substring only for now (cross-platform; reuses
-//! `daemon::get_active_window_title`). Process-exe detection (Windows) is a
-//! future robustness upgrade. Title matching is the same approach
-//! `ManualRuleResolver` already uses for routing.
+//! Detection matches rules against the window TITLE and (Windows) the
+//! foreground PROCESS name ("orca.exe") — the process is stabler because
+//! titles change with every open document. Title matching mirrors what
+//! `ManualRuleResolver` already does for routing.
 //!
 //! Editorial rule (see docs/ISSUES_20260809.md): only add a host to the table
 //! AFTER its behavior is confirmed by testing — record the finding as observed
@@ -41,12 +41,15 @@ const HOST_RULES: &[(&str, InjectionMode)] = &[
 ];
 
 /// Resolve the effective injection mode for the focused window. Pure +
-/// testable. See the module doc for the Auto vs explicit-mode semantics.
+/// testable. `foreground_process` is the focused window's executable name
+/// ("orca.exe", lowercase) — rules match against title OR process, the
+/// process being the stabler signal (titles change with every document).
 pub fn resolve_injection_mode(
     foreground_title: Option<&str>,
+    foreground_process: Option<&str>,
     global_mode: InjectionMode,
 ) -> InjectionMode {
-    match match_title_rule(foreground_title) {
+    match match_rule(foreground_title, foreground_process) {
         Some(mode) => mode,
         None => match global_mode {
             InjectionMode::Auto => InjectionMode::Direct,
@@ -56,14 +59,17 @@ pub fn resolve_injection_mode(
 }
 
 /// First host rule whose needle appears (case-insensitively) in the window
-/// title. Empty needles never match — mirrors ManualRuleResolver's guard
-/// against `contains("")` matching everything.
-fn match_title_rule(foreground_title: Option<&str>) -> Option<InjectionMode> {
-    let title = foreground_title?;
-    let lower = title.to_lowercase();
+/// title or the process name. Empty needles never match — mirrors
+/// ManualRuleResolver's guard against `contains("")` matching everything.
+fn match_rule(foreground_title: Option<&str>, foreground_process: Option<&str>) -> Option<InjectionMode> {
+    let haystack = format!(
+        "{} {}",
+        foreground_title.unwrap_or("").to_lowercase(),
+        foreground_process.unwrap_or("").to_lowercase()
+    );
     HOST_RULES
         .iter()
-        .find(|(needle, _)| !needle.is_empty() && lower.contains(*needle))
+        .find(|(needle, _)| !needle.is_empty() && haystack.contains(*needle))
         .map(|(_, mode)| *mode)
 }
 
@@ -76,11 +82,11 @@ mod tests {
         // Orca rejects all synthetic input (Direct+admin verified to fail) —
         // Copy is the only working mode, for Auto AND explicit Direct.
         assert_eq!(
-            resolve_injection_mode(Some("Orca — Task: fix bug"), InjectionMode::Auto),
+            resolve_injection_mode(Some("Orca — Task: fix bug"), None, InjectionMode::Auto),
             InjectionMode::Copy
         );
         assert_eq!(
-            resolve_injection_mode(Some("my orca session"), InjectionMode::Direct),
+            resolve_injection_mode(Some("my orca session"), None, InjectionMode::Direct),
             InjectionMode::Copy
         );
     }
@@ -90,21 +96,21 @@ mod tests {
         // Auto = policy decides: no rule matches → Direct (plain-terminal
         // behavior, backed by the job layer's clipboard insurance).
         assert_eq!(
-            resolve_injection_mode(Some("Claude Code — bash"), InjectionMode::Auto),
+            resolve_injection_mode(Some("Claude Code — bash"), None, InjectionMode::Auto),
             InjectionMode::Direct
         );
         assert_eq!(
-            resolve_injection_mode(Some("Visual Studio Code"), InjectionMode::Auto),
+            resolve_injection_mode(Some("Visual Studio Code"), None, InjectionMode::Auto),
             InjectionMode::Direct
         );
         // No foreground info (Wayland, detection failure) → same default.
         assert_eq!(
-            resolve_injection_mode(None, InjectionMode::Auto),
+            resolve_injection_mode(None, None, InjectionMode::Auto),
             InjectionMode::Direct
         );
         // Empty title (edge case) → same default.
         assert_eq!(
-            resolve_injection_mode(Some(""), InjectionMode::Auto),
+            resolve_injection_mode(Some(""), None, InjectionMode::Auto),
             InjectionMode::Direct
         );
     }
@@ -112,15 +118,15 @@ mod tests {
     #[test]
     fn explicit_global_is_respected_when_no_rule_matches() {
         assert_eq!(
-            resolve_injection_mode(Some("Claude Code — bash"), InjectionMode::Direct),
+            resolve_injection_mode(Some("Claude Code — bash"), None, InjectionMode::Direct),
             InjectionMode::Direct
         );
         assert_eq!(
-            resolve_injection_mode(Some("Claude Code — bash"), InjectionMode::Copy),
+            resolve_injection_mode(Some("Claude Code — bash"), None, InjectionMode::Copy),
             InjectionMode::Copy
         );
         assert_eq!(
-            resolve_injection_mode(None, InjectionMode::Copy),
+            resolve_injection_mode(None, None, InjectionMode::Copy),
             InjectionMode::Copy
         );
     }
@@ -128,12 +134,27 @@ mod tests {
     #[test]
     fn case_insensitive_match() {
         assert_eq!(
-            resolve_injection_mode(Some("ORCA"), InjectionMode::Direct),
+            resolve_injection_mode(Some("ORCA"), None, InjectionMode::Direct),
             InjectionMode::Copy
         );
         assert_eq!(
-            resolve_injection_mode(Some("OrCa"), InjectionMode::Auto),
+            resolve_injection_mode(Some("OrCa"), None, InjectionMode::Auto),
             InjectionMode::Copy
+        );
+    }
+
+    #[test]
+    fn orca_process_name_forces_copy_with_unrelated_title() {
+        // v0.4.1: the process name is the stabler signal — "orca.exe" matches
+        // even when the window title says something else entirely.
+        assert_eq!(
+            resolve_injection_mode(Some("Untitled — some doc"), Some("orca.exe"), InjectionMode::Direct),
+            InjectionMode::Copy
+        );
+        // And a benign process never collides with the rule.
+        assert_eq!(
+            resolve_injection_mode(Some("notes"), Some("notepad.exe"), InjectionMode::Direct),
+            InjectionMode::Direct
         );
     }
 }

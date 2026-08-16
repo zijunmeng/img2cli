@@ -10,7 +10,7 @@ This file tracks future architecture improvements, user experience features, and
 
 | Version | Theme | Contents |
 |---|---|---|
-| v0.4.1 | Feel + defects | 6-R state machine v3 · 6-S element detect + Tab cycling · IME×Direct real-test (force Copy per-host if conflicting) · host_policy → process-name detection · engineering cleanup (delete legacy `src/` CLI tree, orphan plugin-shell dep, dead_code, themed slider track) |
+| v0.4.1 | Feel + defects | 6-R state machine v3 · 6-S element detect + Tab cycling · **overlay keys: Shift+R reuse last region, `,`/`.` cycle region history (last 8), WASD nudge cursor 1px** · IME×Direct real-test (force Copy per-host if conflicting) · host_policy → process-name detection · engineering cleanup (delete legacy `src/` CLI tree, orphan plugin-shell dep, dead_code, themed slider track) |
 | v0.4.2 | **Annotation editor** | arrow / pen / mosaic (incl. secure mode) / text / save-to-file + undo/redo + color/thickness — flameshot five-mechanism blueprint (`docs/REF_mining_20260816.md` §A) |
 | v0.4.3 | Pinning + multi-monitor | native-window pin (wispterm path + ShareX interaction spec, §C) · per-monitor capture & coordinate mapping |
 | v0.4.4 | Performance + intelligence | SSH keep-alive pool (<200ms uploads, M1-B) · Rust-native pre-emptive freeze (M1-A) · L-tail (cursor capture / focus-loss exit / sound) · OCR→markdown code block (Windows OCR Runtime first) |

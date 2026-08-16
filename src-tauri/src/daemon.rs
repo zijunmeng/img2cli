@@ -20,6 +20,7 @@ pub struct CapturedArtifact {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[allow(dead_code)] // Clipboard/Fullscreen/File mark future capture paths
 pub enum CaptureSource {
     Clipboard,
     Region,
@@ -179,6 +180,50 @@ pub fn start_daemon(app_handle: AppHandle, config: AppConfig) -> DaemonState {
         window_rects: Arc::new(std::sync::Mutex::new(Vec::new())),
         last_upload: Arc::new(std::sync::Mutex::new(None)),
     }
+}
+
+/// Foreground window's process executable name, lowercase ("orca.exe") — a
+/// stabler host signal than window titles (v0.4.1 host_policy).
+#[cfg(windows)]
+pub fn get_foreground_process_name() -> Option<String> {
+    use windows_sys::Win32::Foundation::{CloseHandle, HWND};
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
+        PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetForegroundWindow, GetWindowThreadProcessId,
+    };
+
+    unsafe {
+        let hwnd: HWND = GetForegroundWindow();
+        if hwnd.is_null() {
+            return None;
+        }
+        let mut pid: u32 = 0;
+        GetWindowThreadProcessId(hwnd, &mut pid);
+        if pid == 0 {
+            return None;
+        }
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if handle.is_null() {
+            return None;
+        }
+        let mut buf = [0u16; 512];
+        let mut len = buf.len() as u32;
+        let ok = QueryFullProcessImageNameW(handle, PROCESS_NAME_WIN32, buf.as_mut_ptr(), &mut len);
+        CloseHandle(handle);
+        if ok == 0 {
+            return None;
+        }
+        let path = String::from_utf16_lossy(&buf[..len as usize]);
+        path.rsplit(['\\', '/']).next().map(str::to_lowercase)
+    }
+}
+
+#[cfg(not(windows))]
+pub fn get_foreground_process_name() -> Option<String> {
+    None
 }
 
 #[cfg(windows)]

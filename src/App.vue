@@ -3,7 +3,7 @@
   <div v-if="captureMode" class="fixed inset-0 z-[9999] cursor-crosshair select-none"
        @mousedown="capMouseDown" @mousemove="capMouseMove" @mouseup="capMouseUp">
     <img v-if="capturedImageSrc" :src="capturedImageSrc" class="absolute inset-0 w-full h-full object-cover pointer-events-none" />
-    <div v-if="!hasRect && config.capture_show_hints" class="absolute top-5 left-1/2 -translate-x-1/2 text-white text-sm bg-black/70 px-4 py-1.5 rounded-full pointer-events-none shadow-lg z-[10000]">{{ t('Drag to select · Click a window to snap · Enter to save · Esc to cancel') }}</div>
+    <div v-if="!hasRect && config.capture_show_hints" class="absolute top-5 left-1/2 -translate-x-1/2 text-white text-sm bg-black/70 px-4 py-1.5 rounded-full pointer-events-none shadow-lg z-[10000]">{{ t('Drag to select · Click a window to snap · Tab cycles elements · Shift+R last region · Enter to save · Esc to cancel') }}</div>
     <!-- Auto-detected window under the cursor (6-J): outline + size label -->
     <div v-if="hoverRect && !hasRect" :style="hoverStyle" class="absolute pointer-events-none z-[10000]">
       <span class="absolute -top-6 left-0 bg-[#2997ff] text-white text-[11px] px-1.5 py-0.5 rounded-md font-mono whitespace-nowrap shadow-lg">{{ Math.round(hoverRect.w) }} × {{ Math.round(hoverRect.h) }}</span>
@@ -1004,16 +1004,23 @@ const handleCursorClass = (hd) => ({
 }[hd]);
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
-// Auto window detection (6-J): rects from get_window_rects, ordered Z-topmost
-// first (EnumWindows order); while idle (no selection being drawn) hit-test
-// the cursor — first containing window wins (topmost, greenshot semantics).
+// Auto window detection (6-J/6-S): rects from get_window_rects in Z order
+// with child ELEMENTS right after their parent (Windows) — all candidates
+// containing the cursor form a drill-down list; Tab cycles it.
 const winRects = ref([]);
 const hoverRect = ref(null);
 const downHover = ref(null); // window under the cursor at mousedown (6-P)
-const hitTest = (mx, my) =>
-  winRects.value.find(
+const cursorCands = ref([]); // candidates containing the cursor, list order
+const candIdx = ref(0);
+const candidatesAt = (mx, my) =>
+  winRects.value.filter(
     (r) => mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h
-  ) || null;
+  );
+const cycleCandidate = (dir) => {
+  if (!cursorCands.value.length) return;
+  candIdx.value = (candIdx.value + dir + cursorCands.value.length) % cursorCands.value.length;
+  hoverRect.value = cursorCands.value[candIdx.value] || null;
+};
 const hoverStyle = computed(() => {
   const r = hoverRect.value;
   if (!r) return {};
@@ -1022,6 +1029,33 @@ const hoverStyle = computed(() => {
     border: ((config.value.capture_border_width || 2) + 1) + 'px solid #2997ff',
   };
 });
+// Region history (v0.4.1): Shift+R recalls the newest entry; `,` / `.` cycle.
+const captureHistory = ref([]);
+const historyCursor = ref(-1);
+const applyHistoryRect = () => {
+  const r = captureHistory.value[historyCursor.value];
+  if (!r) return;
+  const px = Math.max(0, r.x);
+  const py = Math.max(0, r.y);
+  rect.value = {
+    x: px, y: py,
+    w: Math.max(4, Math.min(r.w, window.innerWidth - px)),
+    h: Math.max(4, Math.min(r.h, window.innerHeight - py)),
+  };
+  hoverRect.value = null;
+};
+const recallHistory = (idx) => {
+  if (!captureHistory.value.length) return;
+  historyCursor.value = idx;
+  applyHistoryRect();
+};
+const cycleHistory = (dir) => {
+  const n = captureHistory.value.length;
+  if (!n) return;
+  historyCursor.value = historyCursor.value < 0 ? 0 : (historyCursor.value + dir + n) % n;
+  applyHistoryRect();
+};
+
 // Selection appearance knobs (6-L).
 const selBorderStyle = computed(() => ({
   borderWidth: (config.value.capture_border_width || 2) + 'px',
@@ -1044,10 +1078,9 @@ const startDraw = (e) => {
   rect.value = { x: e.clientX, y: e.clientY, w: 0, h: 0 };
   capOrigin.value = { mx: e.clientX, my: e.clientY, rect: null };
 };
-const rectMouseDown = (e) => {
-  if (e.altKey) { startMove(e); return; }
-  startDraw(e);
-};
+// A confirmed selection drags to MOVE by default (6-R: the click that snapped
+// or the drag that drew it IS the confirmation); outside-draw draws fresh.
+const rectMouseDown = (e) => startMove(e);
 const startMove = (e) => {
   capAction.value = 'move';
   capOrigin.value = { mx: e.clientX, my: e.clientY, rect: { ...rect.value } };
@@ -1059,7 +1092,17 @@ const startResize = (hd, e) => {
 };
 const capMouseMove = (e) => {
   if (!capAction.value) {
-    hoverRect.value = (!hasRect.value && winRects.value.length) ? hitTest(e.clientX, e.clientY) : null;
+    const cands = (!hasRect.value && winRects.value.length)
+      ? candidatesAt(e.clientX, e.clientY)
+      : [];
+    const changed =
+      cands.length !== cursorCands.value.length ||
+      cands.some((r, i) => r !== cursorCands.value[i]);
+    if (changed) {
+      cursorCands.value = cands;
+      candIdx.value = 0;
+    }
+    hoverRect.value = cursorCands.value[candIdx.value] || null;
     return;
   }
   const mx = e.clientX, my = e.clientY;
@@ -1088,9 +1131,9 @@ const capMouseMove = (e) => {
 };
 const capMouseUp = () => {
   capAction.value = null;
-  // 6-P: a click-in-place (tiny drawn rect) over a detected window snaps that
-  // window; any real drag keeps the drawn selection. Snipaste semantics.
-  if (!hasRect.value && downHover.value) {
+  // 6-P/6-R: a sub-threshold press-release (jitter-safe 8px) over a detected
+  // window snaps that window; any real drag keeps the drawn selection.
+  if (rect.value.w < 8 && rect.value.h < 8 && downHover.value) {
     const r = downHover.value;
     rect.value = { x: r.x, y: r.y, w: r.w, h: r.h };
     hoverRect.value = null;
@@ -1264,6 +1307,19 @@ onMounted(() => {
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') invoke('cancel_capture');
       else if (e.key === 'Enter' && hasRect.value) confirmRect();
+      // v0.4.1: Shift+R recalls the newest history region; `,` / `.` cycle it.
+      else if (e.shiftKey && (e.key === 'R' || e.key === 'r')) recallHistory(0);
+      else if (e.key === ',') cycleHistory(-1);
+      else if (e.key === '.') cycleHistory(1);
+      // WASD nudges the real cursor 1px (Rust SetCursorPos, DPI-scaled).
+      else if (['w', 'a', 's', 'd'].includes(e.key.toLowerCase())) {
+        const k = e.key.toLowerCase();
+        const dx = k === 'a' ? -1 : k === 'd' ? 1 : 0;
+        const dy = k === 'w' ? -1 : k === 's' ? 1 : 0;
+        invoke('nudge_cursor', { dx, dy }).catch(() => {});
+      }
+      // 6-S: Tab cycles the window/element candidates under the cursor.
+      else if (e.key === 'Tab') { cycleCandidate(e.shiftKey ? -1 : 1); e.preventDefault(); }
     });
     
     // Fetch the captured screen image from Rust memory
@@ -1278,6 +1334,7 @@ onMounted(() => {
             'capture_border_width', 'capture_mask_opacity'].forEach((k) => {
             if (cfg[k] !== undefined) config.value[k] = cfg[k];
           });
+          captureHistory.value = cfg.capture_history || [];
           if (cfg.capture_auto_detect) winRects.value = await invoke('get_window_rects');
         } catch (_) {}
         // The overlay window was built hidden (capture.rs visible:false)) so the
@@ -1324,8 +1381,7 @@ input[type="range"]::-webkit-slider-runnable-track {
   width: 100%;
   height: 8px;
   cursor: pointer;
-  background: #020617;
+  background: var(--bg-input, #020617);
   border-radius: 4px;
-  border: 1px solid #1e293b;
-}
-</style>
+  border: 1px solid var(--color-input-border, #1e293b);
+}</style>

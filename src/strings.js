@@ -23,7 +23,7 @@ export const ZH = {
   'Max Dimension (Pixels)': '最大边长（像素）',
   'No Limit': '不限',
   'System Integration': '系统集成',
-  'Upload Hotkey': '上传热键',
+  'Inject Hotkey': '注入热键',
   '(Recording...)': '（录制中…）',
   '(click & press keys)': '（点击后按键）',
   'Screenshot Hotkey': '截图热键',
@@ -129,8 +129,8 @@ export const ZH = {
   'set as the default SSH host.': '已设为默认 SSH 主机。',
   'Saved target, but password not stored:': '目标已保存，但密码未存储：',
   // ── capture options + overlay (6-J/6-L) ──
-  'Drag to select · Click a window to snap · Enter to save · Esc to cancel':
-    '拖拽选择 · 点击选中窗口 · Enter 保存 · Esc 取消',
+  'Drag to select · Click a window to snap · Tab cycles elements · Shift+R last region · Enter to save · Esc to cancel':
+    '拖拽选择 · 点击选中窗口 · Tab 切换元素 · Shift+R 上次区域 · , . 历史 · WASD 微调 · Enter 保存 · Esc 取消',
   'Capture Options': '截屏选项',
   'Auto-detect windows': '自动识别窗口',
   'Click to snap the window under the cursor': '点击即可选中光标所在窗口',

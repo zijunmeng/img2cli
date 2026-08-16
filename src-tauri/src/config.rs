@@ -93,6 +93,10 @@ pub struct AppConfig {
     pub capture_mask_opacity: u32,
     #[serde(default)]
     pub last_capture_rect: Option<CaptureRect>,
+    /// Confirmed-selection history, newest first, capped at 8 (v0.4.1):
+    /// Shift+R recalls entry 0; `,` / `.` cycle it in the overlay.
+    #[serde(default)]
+    pub capture_history: Vec<CaptureRect>,
 
     // When Direct injection can't be verified as delivered, also copy the
     // path to the clipboard as insurance (P0, docs/ISSUES_20260809.md §2).
@@ -191,6 +195,7 @@ impl Default for AppConfig {
             capture_border_width: default_capture_border_width(),
             capture_mask_opacity: default_capture_mask_opacity(),
             last_capture_rect: None,
+            capture_history: Vec::new(),
             fallback_to_copy: default_fallback_to_copy(),
             ssh: Some(SshConfig {
                 enabled: false,

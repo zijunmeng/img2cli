@@ -60,6 +60,56 @@ pub fn capture_full_screen(app: &AppHandle, state: &DaemonState) -> Result<(), S
                     h: ((bottom - top) as f32 / scale) as i32,
                     title,
                 });
+
+                // 6-S (Windows): also collect this window's CHILD elements —
+                // EnumChildWindows walks all descendants. Children land right
+                // after their parent, so the overlay's Tab cycling drills
+                // down: top window → deeper controls.
+                #[cfg(target_os = "windows")]
+                {
+                    use windows_sys::Win32::Foundation::{HWND, RECT};
+                    use windows_sys::Win32::UI::WindowsAndMessaging::{
+                        EnumChildWindows, GetWindowRect, IsWindowVisible,
+                    };
+                    unsafe extern "system" fn enum_child(hwnd: HWND, lparam: isize) -> i32 {
+                        let out = unsafe { &mut *(lparam as *mut Vec<(i32, i32, i32, i32)>) };
+                        unsafe {
+                            if IsWindowVisible(hwnd) != 0 {
+                                let mut r = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+                                if GetWindowRect(hwnd, &mut r) != 0 {
+                                    out.push((r.left, r.top, r.right - r.left, r.bottom - r.top));
+                                }
+                            }
+                        }
+                        1 // continue
+                    }
+                    let hwnd = w.id().unwrap_or(0) as usize as HWND;
+                    if !hwnd.is_null() {
+                        let mut children: Vec<(i32, i32, i32, i32)> = Vec::new();
+                        unsafe {
+                            EnumChildWindows(hwnd, Some(enum_child), &mut children as *mut _ as isize);
+                        }
+                        for (cx, cy, cw, ch) in children {
+                            let left = cx.max(0);
+                            let top = cy.max(0);
+                            let right = (cx + cw).min(mon_w);
+                            let bottom = (cy + ch).min(mon_h);
+                            if right - left < 8 || bottom - top < 8 {
+                                continue;
+                            }
+                            rects.push(daemon::WindowRect {
+                                x: (left as f32 / scale) as i32,
+                                y: (top as f32 / scale) as i32,
+                                w: ((right - left) as f32 / scale) as i32,
+                                h: ((bottom - top) as f32 / scale) as i32,
+                                title: String::new(),
+                            });
+                        }
+                    }
+                }
+                if rects.len() > 600 {
+                    break; // defensive cap for pathological window trees
+                }
             }
         }
         // xcap deliberately excludes windows owned by the current process
@@ -210,16 +260,21 @@ pub fn capture_region(
             });
         }
 
-        // Remember the confirmed selection (Roadmap 6-L) so the next capture
-        // can preload it for repeat captures of the same region. Always
-        // recorded; the capture_remember_region toggle gates the preload.
+        // Remember the confirmed selection: last_capture_rect for compat plus
+        // the newest-first history (v0.4.1: Shift+R / `,` / `.` in the
+        // overlay). Consecutive duplicates are skipped; history caps at 8.
         if let Ok(mut cfg) = state.config.write() {
-            cfg.last_capture_rect = Some(crate::config::CaptureRect {
+            let r = crate::config::CaptureRect {
                 x: x,
                 y: y,
                 w: w as i32,
                 h: h as i32,
-            });
+            };
+            cfg.last_capture_rect = Some(r);
+            if cfg.capture_history.first() != Some(&r) {
+                cfg.capture_history.insert(0, r);
+                cfg.capture_history.truncate(8);
+            }
             let _ = cfg.save();
         }
 

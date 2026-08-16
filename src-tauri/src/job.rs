@@ -87,6 +87,7 @@ pub enum JobState {
     Completed,
     ReadyToPaste,
     Failed,
+    #[allow(dead_code)] // reserved: future user-initiated cancel
     Cancelled,
 }
 
@@ -104,6 +105,7 @@ pub struct TransferJob {
     pub config: AppConfig,
     pub app_handle: AppHandle,
     pub log_history: Arc<Mutex<Vec<String>>>,
+    #[allow(dead_code)] // kept for future queue-age diagnostics
     pub created_at: std::time::SystemTime,
     /// v0.3.15: false = upload-only background job (capture-then-upload);
     /// true = the full pipeline ending in injection (the inject hotkey).
@@ -479,8 +481,12 @@ fn wrap_quotes(s: String, wrap: bool) -> String {
 /// modes a rule hit is logged as an override with a manual-paste hint.
 /// Returns the mode to actually use for injection.
 fn resolve_effective_mode(job: &TransferJob, inject_window: &Option<String>) -> InjectionMode {
+    // v0.4.1: the foreground process exe is the stabler host signal
+    // ("orca.exe" vs an arbitrary document title).
+    let process = crate::daemon::get_foreground_process_name();
     let effective = crate::host_policy::resolve_injection_mode(
         inject_window.as_deref(),
+        process.as_deref(),
         job.config.injection_mode,
     );
     match job.config.injection_mode {

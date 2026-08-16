@@ -230,6 +230,37 @@ mod tests {
     }
 }
 
+/// Move the real cursor by (dx, dy) CSS px (scaled to physical via the
+/// primary monitor factor) — WASD nudging in the capture overlay (v0.4.1).
+#[tauri::command]
+fn nudge_cursor(dx: i32, dy: i32) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::Foundation::POINT;
+        use windows_sys::Win32::UI::WindowsAndMessaging::{GetCursorPos, SetCursorPos};
+        let scale = xcap::Monitor::all()
+            .ok()
+            .and_then(|ms| ms.first().map(|m| m.scale_factor().ok()).flatten())
+            .unwrap_or(None)
+            .unwrap_or(1.0);
+        let sx = (dx as f32 * scale).round() as i32;
+        let sy = (dy as f32 * scale).round() as i32;
+        let mut p = POINT { x: 0, y: 0 };
+        unsafe {
+            if GetCursorPos(&mut p) == 0 {
+                return Err("GetCursorPos failed".to_string());
+            }
+            SetCursorPos(p.x + sx, p.y + sy);
+        }
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (dx, dy);
+        Ok(())
+    }
+}
+
 #[tauri::command]
 fn get_log_history(state: tauri::State<'_, daemon::DaemonState>) -> Result<Vec<String>, String> {
     if let Ok(history) = state.log_history.lock() {
@@ -609,6 +640,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             get_config,
             save_config,
+            nudge_cursor,
             get_log_history,
             copy_logs,
             write_logs,
