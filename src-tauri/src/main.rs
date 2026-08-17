@@ -376,6 +376,86 @@ fn drag_pin(app_handle: tauri::AppHandle, id: u32) {
     }
 }
 
+/// Rust-side save dialog for the capture overlay (v0.4.3 fix): the overlay
+/// window is NOT in the capability allowlist, so the JS plugin-dialog call
+/// was silently DENIED by the ACL. Custom commands are ungated — same escape
+/// hatch as show_capture_overlay. Async so the blocking dialog stays off the
+/// main thread.
+#[tauri::command]
+async fn save_image_dialog(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, daemon::DaemonState>,
+    default_name: String,
+) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let picked = app_handle
+        .dialog()
+        .file()
+        .set_file_name(&default_name)
+        .add_filter("PNG image", &["png"])
+        .blocking_save_file();
+    let path = picked.map(|p| p.to_string());
+    daemon::log_message(
+        &app_handle,
+        &state.log_history,
+        &match &path {
+            Some(p) => format!("Save dialog chose: {}", p),
+            None => "Save dialog cancelled.".to_string(),
+        },
+    );
+    Ok(path)
+}
+
+/// One-shot pin creation (v0.4.3 fix): store the image + build the window in
+/// a single Rust command, with daemon logging so failures are visible in the
+/// System Logs panel instead of a silent webview console.
+#[tauri::command]
+async fn pin_image(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, daemon::DaemonState>,
+    data_url: String,
+    w: f64,
+    h: f64,
+) -> Result<u32, String> {
+    let id = (std::time::SystemTime::now()
+        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+        % 1_000_000_000) as u32;
+    {
+        let mut pins = state.pins.lock().map_err(|_| "pin store lock failed".to_string())?;
+        pins.insert(id, data_url);
+    }
+    let built = tauri::WebviewWindowBuilder::new(
+        &app_handle,
+        format!("pin-{}", id),
+        tauri::WebviewUrl::App(format!("index.html?pin={}", id).into()),
+    )
+    .title("img2cli pin")
+    .decorations(false)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .resizable(false)
+    .visible(true)
+    .inner_size(w.max(80.0), h.max(80.0))
+    .build();
+    match built {
+        Ok(_) => {
+            daemon::log_message(
+                &app_handle,
+                &state.log_history,
+                &format!("Pinned to screen (pin-{}, {:.0}×{:.0}).", id, w, h),
+            );
+            Ok(id)
+        }
+        Err(e) => {
+            let msg = format!("Pin window creation failed: {}", e);
+            daemon::log_message(&app_handle, &state.log_history, &msg);
+            Err(msg)
+        }
+    }
+}
+
 #[tauri::command]
 async fn test_connection(
     host: String,
@@ -738,6 +818,8 @@ fn main() {
             close_pin,
             resize_pin,
             drag_pin,
+            save_image_dialog,
+            pin_image,
             test_connection,
             load_ssh_config,
             set_ssh_password,

@@ -1,7 +1,8 @@
 <template>
   <!-- Region-capture overlay (screenshot hotkey opens index.html?capture=1) -->
   <div v-if="captureMode" class="fixed inset-0 z-[9999] cursor-crosshair select-none"
-       @mousedown="capMouseDown" @mousemove="capMouseMove" @mouseup="capMouseUp">
+       @mousedown="capMouseDown" @mousemove="capMouseMove" @mouseup="capMouseUp"
+       @contextmenu.prevent="cancelRect">
     <img v-if="capturedImageSrc" :src="capturedImageSrc" class="absolute inset-0 w-full h-full object-cover pointer-events-none" />
     <!-- Annotation canvas (v0.4.2): full-overlay, pointer-transparent, clipped
          to the selection; annotations live in overlay coordinates so they stay
@@ -1206,7 +1207,7 @@ const drawObjects = (ctx, list) => {
       ctx.font = `600 ${a.fontSize}px system-ui, sans-serif`;
       ctx.textBaseline = 'top';
       a.text.split('\n').forEach((line, i) => ctx.fillText(line, a.x, a.y + i * (a.fontSize + 2)));
-    } else if (a.type === 'mosaic' && frozenImg.complete && frozenImg.naturalWidth > 0) {
+    } else if (a.type === 'mosaic' && a.w >= 4 && a.h >= 4 && frozenImg.complete && frozenImg.naturalWidth > 0) {
       // Two-step pixelate: downscale to a tiny offscreen, upscale with
       // smoothing off. Source coords are physical (natural size = monitor px).
       const dpr = window.devicePixelRatio || 1;
@@ -1254,6 +1255,37 @@ const distToSeg = (px, py, x1, y1, x2, y2) => {
   const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / l2));
   return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
 };
+// Eraser: generous hit padding — thin strokes are otherwise nearly impossible
+// to click; hold-and-sweep erases everything the cursor touches.
+const eraseAt = (px, py) => {
+  let erased = false;
+  for (let i = annots.value.length - 1; i >= 0; i--) {
+    if (hitAnnotAt(px, py, i)) {
+      if (!erased) pushUndo();
+      annots.value.splice(i, 1);
+      erased = true;
+    }
+  }
+  if (erased) redrawAnnots();
+};
+const hitAnnotAt = (px, py, idx) => {
+  const a = annots.value[idx];
+  const pad = Math.max(8, a.size * 2.5);
+  if (a.type === 'pen' || a.type === 'marker') {
+    for (let s = 1; s < a.pts.length; s++) {
+      if (distToSeg(px, py, a.pts[s - 1].x, a.pts[s - 1].y, a.pts[s].x, a.pts[s].y) <= pad) return true;
+    }
+    return false;
+  }
+  if (a.type === 'arrow') return distToSeg(px, py, a.x1, a.y1, a.x2, a.y2) <= pad;
+  if (a.type === 'rect' || a.type === 'ellipse' || a.type === 'mosaic') {
+    return px >= a.x - pad && px <= a.x + a.w + pad && py >= a.y - pad && py <= a.y + a.h + pad;
+  }
+  if (a.type === 'text') {
+    return px >= a.x - 6 && px <= a.x + (a.tw || 120) + 6 && py >= a.y - 6 && py <= a.y + a.text.split('\n').length * (a.fontSize + 2) + 6;
+  }
+  return false;
+};
 const hitAnnot = (px, py) => {
   for (let i = annots.value.length - 1; i >= 0; i--) {
     const a = annots.value[i];
@@ -1279,8 +1311,8 @@ const hitAnnot = (px, py) => {
 const annotMouseDown = (e) => {
   const x = e.clientX, y = e.clientY;
   if (activeTool.value === 'eraser') {
-    const i = hitAnnot(x, y);
-    if (i >= 0) { pushUndo(); annots.value.splice(i, 1); redrawAnnots(); }
+    eraseAt(x, y);
+    capAction.value = 'erase'; // hold + sweep to erase continuously
     return;
   }
   if (activeTool.value === 'text') {
@@ -1296,7 +1328,8 @@ const annotMouseDown = (e) => {
   } else if (activeTool.value === 'arrow') {
     activeAnnot.value = { type: 'arrow', x1: x, y1: y, x2: x, y2: y, ...common };
   } else {
-    activeAnnot.value = { type: activeTool.value, x, y, w: 0, h: 0, ...common };
+    // sx/sy = the anchor corner; annotMouseMove normalizes x/y/w/h from it.
+    activeAnnot.value = { type: activeTool.value, sx: x, sy: y, x, y, w: 0, h: 0, ...common };
   }
 };
 const annotMouseMove = (e) => {
@@ -1304,7 +1337,14 @@ const annotMouseMove = (e) => {
   if (!a) return;
   if (a.type === 'pen' || a.type === 'marker') a.pts.push({ x: e.clientX, y: e.clientY });
   else if (a.type === 'arrow') { a.x2 = e.clientX; a.y2 = e.clientY; }
-  else { a.w = e.clientX - a.x; a.h = e.clientY - a.y; }
+  else {
+    // Rect-like tools (rect/ellipse/mosaic): normalize live — negative
+    // w/h fed into drawImage's source rect breaks the mosaic (and flips
+    // shapes); drag from any corner must behave identically.
+    const x0 = Math.min(a.sx, e.clientX), x1 = Math.max(a.sx, e.clientX);
+    const y0 = Math.min(a.sy, e.clientY), y1 = Math.max(a.sy, e.clientY);
+    a.x = x0; a.y = y0; a.w = x1 - x0; a.h = y1 - y0;
+  }
   redrawAnnots();
 };
 const annotMouseUp = () => {
@@ -1375,22 +1415,22 @@ const actionCopy = async () => {
 };
 const actionSave = async () => {
   try {
+    // v0.4.3 fix: the dialog runs RUST-side (save_image_dialog) — the overlay
+    // window isn't in the capability allowlist, so the JS plugin-dialog call
+    // was silently denied by the ACL.
     const stamp = new Date().toISOString().slice(0, 19).replaceAll(/[-:T]/g, '');
-    const path = await saveDialog({
-      defaultPath: `img2cli-${stamp}.png`,
-      filters: [{ name: 'PNG', extensions: ['png'] }],
-    });
-    if (!path) return;
+    const path = await invoke('save_image_dialog', { defaultName: `img2cli-${stamp}.png` });
+    if (!path) return; // cancelled
     await invoke('write_image', { path, dataUrl: annots.value.length ? compositeRegion() : plainRegionDataUrl() });
   } catch (err) { console.error('save failed:', err); }
   closeOverlay();
 };
 const actionPin = async () => {
   try {
+    // v0.4.3 fix: single Rust command (store + window build) with daemon
+    // logging, so failures surface in the System Logs panel.
     const dataUrl = annots.value.length ? compositeRegion() : plainRegionDataUrl();
-    const id = Date.now() % 1_000_000_000;
-    await invoke('set_pin_image', { id, dataUrl });
-    await invoke('create_pin', { id, w: Math.max(80, rect.value.w), h: Math.max(80, rect.value.h) });
+    await invoke('pin_image', { dataUrl, w: Math.max(80, rect.value.w), h: Math.max(80, rect.value.h) });
   } catch (err) { console.error('pin failed:', err); }
   closeOverlay();
 };
@@ -1477,6 +1517,7 @@ const capMouseMove = (e) => {
     return;
   }
   if (capAction.value === 'annotate') { annotMouseMove(e); return; }
+  if (capAction.value === 'erase') { eraseAt(e.clientX, e.clientY); return; }
   const mx = e.clientX, my = e.clientY;
   const winW = window.innerWidth, winH = window.innerHeight;
   if (capAction.value === 'draw') {
@@ -1503,6 +1544,7 @@ const capMouseMove = (e) => {
 };
 const capMouseUp = () => {
   if (capAction.value === 'annotate') { annotMouseUp(); capAction.value = null; return; }
+  if (capAction.value === 'erase') { capAction.value = null; return; }
   capAction.value = null;
   // 6-P/6-R: a sub-threshold press-release (jitter-safe 8px) over a detected
   // window snaps that window; any real drag keeps the drawn selection.
@@ -1695,14 +1737,21 @@ onMounted(() => {
   if (params.get('capture') === '1') {
     // This webview is the region-capture overlay (loaded by the screenshot hotkey).
     captureMode.value = true;
-    window.addEventListener('keydown', (e) => {
-      // While the text editor is open it owns all keys (except what its own
-      // handler defers); Esc there discards the editor, not the overlay.
-      if (editingText.value) return;
+    // Capture-phase listener: fires before any child's stopPropagation (the
+    // inline text editor stops keydown), and before focus quirks can eat Esc.
+    window.addEventListener(
+      'keydown',
+      (e) => {
+        // While the text editor is open it owns all keys (except what its own
+        // handler defers); Esc there discards the editor, not the overlay.
+        if (editingText.value) return;
       // v0.4.2 annotation shortcuts.
       if (e.ctrlKey && e.code === 'KeyZ') { e.preventDefault(); e.shiftKey ? redoAnnot() : undoAnnot(); return; }
       if (e.ctrlKey && e.code === 'KeyY') { e.preventDefault(); redoAnnot(); return; }
-      if (e.key === 'Escape') invoke('cancel_capture');
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        invoke('cancel_capture').catch((err) => console.error('cancel failed:', err));
+      }
       else if (e.key === 'Enter' && hasRect.value) confirmRect();
       // v0.4.1 keys — matched via e.code (physical key): with a CJK IME
       // active, keydown e.key arrives as "Process" for letter/punct keys,
@@ -1718,7 +1767,9 @@ onMounted(() => {
       }
       // 6-S: Tab cycles the window/element candidates under the cursor.
       else if (e.key === 'Tab') { cycleCandidate(e.shiftKey ? -1 : 1); e.preventDefault(); }
-    });
+      },
+      { capture: true }
+    );
     
     // Fetch the captured screen image from Rust memory
     invoke('get_captured_image')
