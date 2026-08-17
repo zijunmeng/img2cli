@@ -192,6 +192,14 @@ Open decisions: signing certificate budget (v1.0.0 stage); OCR scope = Windows O
   3. Hover outline vanishes the moment the button is pressed (hoverRect nulled on first mousemove while drawing) — keep it visible during the hold until movement passes the threshold.
 * **Fix sketch**: rectMouseDown → plain = startMove (revert fix2's inside-draw), keep Alt variant as redundant; raise hasRect/draw threshold to 8px for the mouseup snap arbitration; hold hoverRect until draw actually exceeds threshold.
 
+### T. Overlay UX v4 — Snipaste 行为对齐 (v0.4.3 用户报告, 2026-08-17)
+
+1. **确认态模型**: 有选区 ≠ 确认。只有点击 ✓ 才算确认;确认前光标保持十字、**任意位置 (含选区内部) 拖拽 = 重画选区** (Tab/Shift+R/`,`/`.` 产生的选区同样未确认);确认后光标才变为带箭头十字、区内拖动 = 移动。需要显式 `confirmed` 状态 (当前"选区存在即已确认"的隐式模型是错的)。
+2. **文本工具失效**: 点击文本工具后在选区内点击,输入框无法输入 (v0.4.2 起悬而未决; 嫌疑: capture-phase 键盘监听与 textarea 焦点/事件链,需带日志调试)。
+3. **橡皮擦应为"逐段擦除"**: Snipaste 是擦除笔迹被扫过的**片段**(polyline 在命中处分裂),不是整对象删除。当前对象级删除不符合预期;需实现 stroke-splitting。
+4. **Ctrl+C = 复制图像并退出**: 选区存在时 Ctrl+C 直接把 (含标注的) 图像复制到剪贴板并关闭 overlay — Snipaste 行为,发往任意处的入口。
+5. **一键保存**: 点击 💾 不弹路径对话框 — 自动命名 `img2cli_YYYY-MM-DD_HH-mm-ss` 存入默认目录 (save_dir),保存后退出 overlay。(Snipaste: `Snipaste_2026-08-17_16-26-37` 格式,直接落盘;是否可配置默认保存目录随后议。)
+
 ### S. Snipaste-grade element detection + Tab cycling (v0.4.0 follow-up)
 * **Wanted**: Snipaste detects many window ELEMENTS (button/input level) under one cursor position and cycles them with Tab.
 * **Fix sketch**: backend — EnumChildWindows descent (greenshot's FindChildUnderPoint, ~3 levels, edge-rule: cursor on a rect edge returns the parent whole) exposing all candidates containing the cursor, Z-topmost-first (Windows-only via windows-sys; macOS via AX APIs later); frontend — candidate list at the cursor, Tab/Shift+Tab cycles the highlighted candidate, outline + size label track the active one.
