@@ -148,14 +148,19 @@ pub fn capture_full_screen(app: &AppHandle, state: &DaemonState) -> Result<(), S
 }
 
 /// Open the fullscreen region-selection overlay (Windows / macOS only).
+/// v0.4.4 (T6): the overlay window is created ONCE (hidden, at startup via
+/// `prewarm_capture_overlay`) and kept alive — the hotkey only refreshes it,
+/// so there is no window/webview cold start between hotkey and first paint.
 pub fn open_capture_overlay(app: &AppHandle) {
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     {
         if let Some(existing) = app.get_webview_window("capture") {
-            let _ = existing.show();
-            let _ = existing.set_focus();
+            use tauri::Emitter;
+            let _ = existing.emit_to("capture", "capture-refresh", ());
             return;
         }
+        // First run (or the window died): build it now, hidden — the frontend
+        // loads and invokes show_capture_overlay itself after rendering.
         let _ = WebviewWindowBuilder::new(
             app,
             "capture",
@@ -176,9 +181,36 @@ pub fn open_capture_overlay(app: &AppHandle) {
     }
 }
 
+/// Build the hidden overlay window at startup (T6: instant hotkey response).
+pub fn prewarm_capture_overlay(app: &AppHandle) {
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    {
+        if app.get_webview_window("capture").is_none() {
+            let _ = WebviewWindowBuilder::new(
+                app,
+                "capture",
+                WebviewUrl::App("index.html?capture=1".into()),
+            )
+            .title("")
+            .fullscreen(true)
+            .transparent(true)
+            .decorations(false)
+            .always_on_top(true)
+            .skip_taskbar(true)
+            .visible(false)
+            .build();
+        }
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        let _ = app;
+    }
+}
+
 fn close_capture_overlay(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("capture") {
-        let _ = win.close();
+        // T6: hide, don't destroy — the window stays warm for the next hotkey.
+        let _ = win.hide();
     }
 }
 
@@ -193,15 +225,21 @@ pub fn get_window_rects(state: tauri::State<'_, DaemonState>) -> Result<Vec<daem
 pub fn get_captured_image(state: tauri::State<'_, DaemonState>) -> Result<String, String> {
     let lock = state.captured_image.lock().map_err(|_| "Lock failed")?;
     if let Some(ref img) = *lock {
-        let mut png_bytes = Vec::new();
-        let mut cursor = std::io::Cursor::new(&mut png_bytes);
-        
-        let dynamic_img = image::DynamicImage::ImageRgba8(img.clone());
-        dynamic_img.write_to(&mut cursor, image::ImageFormat::Png)
-            .map_err(|e| format!("Failed to encode captured image to PNG: {}", e))?;
-            
-        let b64 = base64_encode(&png_bytes);
-        return Ok(format!("data:image/png;base64,{}", b64));
+        // T6 (v0.4.4): the overlay DISPLAY layer ships as JPEG — a 4K PNG is
+        // a multi-MB base64 payload over IPC (the visible hotkey→frame lag);
+        // JPEG q85 is ~10x smaller. Final crops still come from the pristine
+        // RgbaImage in Rust, so delivered quality is unaffected; only
+        // ANNOTATED composites sample this display layer.
+        use image::codecs::jpeg::JpegEncoder;
+        use image::ExtendedColorType;
+        #[allow(unused_imports)]
+        use image::ImageEncoder as _;
+        let mut bytes = Vec::new();
+        let mut enc = JpegEncoder::new_with_quality(&mut bytes, 85);
+        enc.encode(img.as_raw(), img.width(), img.height(), ExtendedColorType::Rgba8)
+            .map_err(|e| format!("JPEG encode failed: {}", e))?;
+        let b64 = base64_encode(&bytes);
+        return Ok(format!("data:image/jpeg;base64,{}", b64));
     }
     Err("No captured screenshot in memory".to_string())
 }

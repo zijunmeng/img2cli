@@ -9,10 +9,10 @@
          glued to the frozen frame when the selection moves. -->
     <canvas ref="annotCanvas" class="absolute inset-0 w-full h-full pointer-events-none z-[10001]"></canvas>
     <!-- In-progress text editor (text tool) -->
-    <textarea v-if="editingText" v-model="editingText.value"
+    <textarea v-if="editingText" ref="textEditor" v-model="editingText.value" autofocus spellcheck="false"
       class="absolute z-[10005] bg-transparent outline-none border border-dashed border-white/60 px-0.5 py-0 resize-none overflow-hidden whitespace-pre"
-      :style="{ left: editingText.x + 'px', top: editingText.y + 'px', color: toolColor, fontSize: textFontSize + 'px', lineHeight: textFontSize + 'px', minWidth: '80px', height: (textFontSize + 6) + 'px', fontWeight: 600 }"
-      @mousedown.stop @keydown.stop="textKeydown" @blur="commitText"></textarea>
+      :style="{ left: editingText.x + 'px', top: editingText.y + 'px', color: toolColor, fontSize: textFontSize + 'px', lineHeight: textFontSize + 'px', minWidth: '120px', height: (textFontSize + 8) + 'px', fontWeight: 600 }"
+      @mousedown.stop.prevent @keydown.stop="textKeydown" @blur="commitText"></textarea>
     <!-- Key guide, Snipaste-style bottom-left panel (one key per line) -->
     <div v-if="config.capture_show_hints && !editingText" class="absolute bottom-5 left-5 bg-black/70 text-white/90 text-[11px] leading-relaxed px-3.5 py-2.5 rounded-lg pointer-events-none shadow-lg z-[10006] font-mono space-y-0.5">
       <div v-for="(line, i) in hintLines" :key="i">{{ line }}</div>
@@ -22,7 +22,7 @@
       <span class="absolute -top-6 left-0 bg-[#2997ff] text-white text-[11px] px-1.5 py-0.5 rounded-md font-mono whitespace-nowrap shadow-lg">{{ Math.round(hoverRect.w) }} × {{ Math.round(hoverRect.h) }}</span>
     </div>
     <div v-if="hasRect" :style="[rectStyle, selBorderStyle]" @mousedown.stop="rectMouseDown"
-         :class="['absolute border-solid border-[#2997ff] box-border z-[10000]', activeTool === 'select' ? 'cursor-move' : 'cursor-crosshair']">
+         :class="['absolute border-solid border-[#2997ff] box-border z-[10000]', activeTool === 'select' && confirmed ? 'cursor-move' : 'cursor-crosshair']">
       <div v-for="hd in handles" :key="hd" :style="handleStyle(hd)" :class="handleCursorClass(hd)"
            @mousedown.stop.prevent="startResize(hd, $event)"
            class="absolute w-2.5 h-2.5 bg-white border border-[#2997ff] rounded-sm shadow"></div>
@@ -54,18 +54,25 @@
         <span class="w-px h-4 bg-white/20 mx-0.5"></span>
         <button @click.stop="actionPin" :title="t('Pin to screen')" class="w-7 h-7 rounded-md hover:bg-white/15 text-sm flex items-center justify-center">📌</button>
         <button @click.stop="actionSave" :title="t('Save to file')" class="w-7 h-7 rounded-md hover:bg-white/15 text-sm flex items-center justify-center">💾</button>
-        <button @click.stop="actionCopy" :title="t('Copy image to clipboard')" class="w-7 h-7 rounded-md hover:bg-white/15 text-sm flex items-center justify-center">📋</button>
-        <button @click.stop="confirmRect" :title="t('Upload + inject')" class="px-2 h-7 rounded-md bg-[#2997ff] hover:brightness-110 text-xs font-medium flex items-center">✓</button>
+        <button @click.stop="actionCopy" :title="t('Copy image to clipboard') + ' (Ctrl+C)'" class="w-7 h-7 rounded-md hover:bg-white/15 text-sm flex items-center justify-center">📋</button>
+        <button @click.stop="confirmSelection" :title="t('Confirm selection (then move/annotate)')"
+                :class="['px-2 h-7 rounded-md text-xs font-medium flex items-center', confirmed ? 'bg-white/20 text-white/60' : 'bg-white/15 hover:bg-white/25 text-white']">✓</button>
+        <button @click.stop="confirmRect" :title="t('Upload + inject')" class="px-2 h-7 rounded-md bg-[#2997ff] hover:brightness-110 text-xs font-medium flex items-center">⬆</button>
         <button @click.stop="cancelRect" :title="t('Cancel')" class="w-6 h-7 rounded-md hover:bg-white/15 text-xs">✕</button>
       </div>
     </div>
   </div>
   <!-- Pin-to-screen window (index.html?pin=ID) -->
   <div v-else-if="pinMode" class="fixed inset-0 overflow-hidden select-none bg-transparent"
-       @contextmenu.prevent="closePin" @dblclick="closePin" @wheel.prevent="pinZoom" @mousemove="pinHover = true">
+       @contextmenu.prevent="pinMenu = !pinMenu" @dblclick="closePin" @wheel.prevent="pinZoom" @mousedown="pinMenu = false">
     <img v-if="pinImg" :src="pinImg" draggable="false"
          class="w-full h-full object-fill cursor-move" @mousedown.stop="startPinDrag" />
-    <div v-if="pinHover" class="absolute top-1 right-1 text-[10px] text-white/0 select-none pointer-events-none">·</div>
+    <div v-if="pinMenu" class="absolute top-1 left-1 z-50 bg-[#1a1a1a]/95 backdrop-blur rounded-lg py-1 text-xs text-white shadow-xl min-w-[140px]"
+         @mousedown.stop @contextmenu.prevent>
+      <button class="w-full text-left px-3 py-1.5 hover:bg-white/15" @click="pinCopy">📋 {{ t('Copy image to clipboard') }}</button>
+      <button class="w-full text-left px-3 py-1.5 hover:bg-white/15" @click="pinSaveAs">💾 {{ t('Save to file') }}</button>
+      <button class="w-full text-left px-3 py-1.5 hover:bg-white/15 text-red-300" @click="closePin">🗑 {{ t('Destroy pin') }}</button>
+    </div>
   </div>
   <div
     v-else 
@@ -1070,7 +1077,8 @@ const cycleCandidate = (dir) => {
   // must never empty the candidate list).
   const r = cursorCands.value[candIdx.value];
   hoverRect.value = null;
-  if (r) rect.value = { x: r.x, y: r.y, w: r.w, h: r.h };
+  // The adopted selection is UNCONFIRMED (T1): inside-drag redraws until ✓.
+  if (r) { rect.value = { x: r.x, y: r.y, w: r.w, h: r.h }; confirmed.value = false; }
 };
 const hoverStyle = computed(() => {
   const r = hoverRect.value;
@@ -1094,6 +1102,7 @@ const applyHistoryRect = () => {
     h: Math.max(4, Math.min(r.h, window.innerHeight - py)),
   };
   hoverRect.value = null;
+  confirmed.value = false; // history recall is also an unconfirmed selection (T1)
 };
 const recallHistory = (idx) => {
   if (!captureHistory.value.length) return;
@@ -1113,6 +1122,10 @@ const cycleHistory = (dir) => {
 // drawObjects() is the single renderer used by BOTH the live canvas (clipped
 // to the selection) and the confirm-time composite at full physical res.
 const activeTool = ref('select'); // select | arrow | pen | marker | mosaic | text | rect | ellipse | eraser
+// T1 (v0.4.4): a selection existing is NOT confirmation. Only ✓ confirms —
+// before that the cursor stays a crosshair and dragging anywhere (incl.
+// inside the selection) redraws; after ✓ it becomes the move-arrow inside.
+const confirmed = ref(false);
 const annots = ref([]);
 const undoStack = ref([]);
 const redoStack = ref([]);
@@ -1120,6 +1133,7 @@ const toolColor = ref('#ff4d4f');
 const toolSize = ref(3); // 1..8 — shared by line width / mosaic blocks / text size
 const activeAnnot = ref(null); // in-progress object while dragging
 const editingText = ref(null); // { x, y, value }
+const textEditor = ref(null);
 const colorMenu = ref(false);
 const annotCanvas = ref(null);
 const frozenImg = new Image();
@@ -1255,18 +1269,43 @@ const distToSeg = (px, py, x1, y1, x2, y2) => {
   const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / l2));
   return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
 };
-// Eraser: generous hit padding — thin strokes are otherwise nearly impossible
-// to click; hold-and-sweep erases everything the cursor touches.
+// Eraser (T3): pen/marker strokes SPLIT at the erased span (Snipaste-style
+// partial erase — only the swept segment disappears); shape/text/mosaic
+// objects are removed whole. One undo snapshot per sweep.
+const ERASE_RADIUS = 10;
 const eraseAt = (px, py) => {
-  let erased = false;
+  let mutated = false;
   for (let i = annots.value.length - 1; i >= 0; i--) {
-    if (hitAnnotAt(px, py, i)) {
-      if (!erased) pushUndo();
+    const a = annots.value[i];
+    if (a.type === 'pen' || a.type === 'marker') {
+      // Keep only the points outside the erase radius; contiguous kept runs
+      // become the resulting stroke(s).
+      const runs = [];
+      let cur = [];
+      for (const p of a.pts) {
+        if (Math.hypot(p.x - px, p.y - py) <= ERASE_RADIUS) {
+          if (cur.length >= 2) runs.push(cur);
+          cur = [];
+        } else {
+          cur.push(p);
+        }
+      }
+      if (cur.length >= 2) runs.push(cur);
+      if (runs.length !== 1 || runs[0].length !== a.pts.length) {
+        if (!mutated) pushUndo();
+        mutated = true;
+        annots.value.splice(i, 1);
+        // shortest runs first so indices stay stable while inserting
+        runs.sort((r1, r2) => r2.length - r1.length);
+        runs.forEach((r) => annots.value.splice(i, 0, { ...a, pts: r }));
+      }
+    } else if (hitAnnotAt(px, py, i)) {
+      if (!mutated) pushUndo();
       annots.value.splice(i, 1);
-      erased = true;
+      mutated = true;
     }
   }
-  if (erased) redrawAnnots();
+  if (mutated) redrawAnnots();
 };
 const hitAnnotAt = (px, py, idx) => {
   const a = annots.value[idx];
@@ -1318,7 +1357,14 @@ const annotMouseDown = (e) => {
   if (activeTool.value === 'text') {
     if (editingText.value) commitText();
     editingText.value = { x, y, value: '' };
-    nextTick(() => document.querySelector('textarea')?.focus());
+    // T2 fix: focus via the template ref with retries — querySelector + a
+    // single nextTick raced the patch; preventDefault on mousedown keeps the
+    // focus from jumping back to the overlay.
+    nextTick(() => {
+      for (let i = 0; i < 5; i++) {
+        setTimeout(() => textEditor.value?.focus(), i * 30);
+      }
+    });
     return;
   }
   capAction.value = 'annotate';
@@ -1415,12 +1461,16 @@ const actionCopy = async () => {
 };
 const actionSave = async () => {
   try {
-    // v0.4.3 fix: the dialog runs RUST-side (save_image_dialog) — the overlay
-    // window isn't in the capability allowlist, so the JS plugin-dialog call
-    // was silently denied by the ACL.
-    const stamp = new Date().toISOString().slice(0, 19).replaceAll(/[-:T]/g, '');
-    const path = await invoke('save_image_dialog', { defaultName: `img2cli-${stamp}.png` });
-    if (!path) return; // cancelled
+    // T5 (v0.4.4): one-click save — Snipaste-style auto-named file
+    // (img2cli_YYYY-MM-DD_HH-mm-ss) straight into the default dir, no dialog.
+    const now = new Date();
+    const p2 = (n) => String(n).padStart(2, '0');
+    const stamp = `${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())}_${p2(now.getHours())}-${p2(now.getMinutes())}-${p2(now.getSeconds())}`;
+    const dir = config.value.save_dir && config.value.save_dir.trim()
+      ? config.value.save_dir.trim().replace(/[\\/]+$/, '')
+      : null;
+    // Bare filename → Rust resolves it into the default temp img2cli dir.
+    const path = dir ? `${dir}/img2cli_${stamp}.png` : `img2cli_${stamp}.png`;
     await invoke('write_image', { path, dataUrl: annots.value.length ? compositeRegion() : plainRegionDataUrl() });
   } catch (err) { console.error('save failed:', err); }
   closeOverlay();
@@ -1438,15 +1488,65 @@ const actionPin = async () => {
 // anyway so copy/save/pin share one code path at full physical res.
 const plainRegionDataUrl = () => compositeRegion();
 
+// Load the frozen frame + per-session state; reveal the overlay only after
+// the frame renders (flash-free). Called at mount AND on every capture-refresh
+// (T6 persistent window).
+const loadCaptureImage = async () => {
+  try {
+    const src = await invoke('get_captured_image');
+    capturedImageSrc.value = src;
+    // The annotation engine needs the frozen frame as a drawable Image
+    // (mosaic sampling + compositing). Fresh session state each time.
+    frozenImg.src = src;
+    annots.value = [];
+    undoStack.value = [];
+    redoStack.value = [];
+    activeTool.value = 'select';
+    confirmed.value = false;
+    rect.value = { x: 0, y: 0, w: 0, h: 0 };
+    hoverRect.value = null;
+    cursorCands.value = [];
+    redrawAnnots();
+    // Capture options + window detection, fetched before the reveal.
+    try {
+      const cfg = await invoke('get_config');
+      ['capture_auto_detect', 'capture_show_hints',
+        'capture_border_width', 'capture_mask_opacity'].forEach((k) => {
+        if (cfg[k] !== undefined) config.value[k] = cfg[k];
+      });
+      captureHistory.value = cfg.capture_history || [];
+      if (cfg.capture_auto_detect) winRects.value = await invoke('get_window_rects');
+    } catch (_) {}
+    await nextTick();
+    try { await invoke('show_capture_overlay'); } catch (_) {}
+  } catch (e) {
+    console.error('Failed to load captured image:', e);
+  }
+};
+
 // Pin window page (?pin=ID).
 const pinMode = ref(false);
 const pinImg = ref('');
 const pinIdNum = ref(0);
 const pinBase = ref({ w: 0, h: 0 });
 const pinScale = ref(1);
-const pinHover = ref(false);
+const pinMenu = ref(false);
 const closePin = () => { try { invoke('close_pin', { id: pinIdNum.value }); } catch (_) {} };
 const startPinDrag = () => { try { invoke('drag_pin', { id: pinIdNum.value }); } catch (_) {} };
+const pinCopy = async () => {
+  pinMenu.value = false;
+  try { await invoke('copy_image', { dataUrl: pinImg.value }); } catch (e) { console.error(e); }
+};
+const pinSaveAs = async () => {
+  pinMenu.value = false;
+  try {
+    const now = new Date();
+    const p2 = (n) => String(n).padStart(2, '0');
+    const name = `img2cli_${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())}_${p2(now.getHours())}-${p2(now.getMinutes())}-${p2(now.getSeconds())}.png`;
+    const path = await invoke('save_image_dialog', { defaultName: name });
+    if (path) await invoke('write_image', { path, dataUrl: pinImg.value });
+  } catch (e) { console.error(e); }
+};
 const pinZoom = (e) => {
   pinScale.value = Math.min(5, Math.max(0.2, pinScale.value * (e.deltaY < 0 ? 1.1 : 0.9)));
   try {
@@ -1482,14 +1582,22 @@ const capMouseDown = (e) => {
 // selection; Alt+drag inside keeps the move affordance for adjusting.
 const startDraw = (e) => {
   capAction.value = 'draw';
+  confirmed.value = false; // a fresh draw returns to the unconfirmed state
   rect.value = { x: e.clientX, y: e.clientY, w: 0, h: 0 };
   capOrigin.value = { mx: e.clientX, my: e.clientY, rect: null };
 };
-// A confirmed selection: the SELECT tool drags to move (6-R); a draw tool or
-// the eraser starts annotating instead. Handles keep resizing either way.
+// Selection interaction (T1): a draw tool always annotates; the select tool
+// REDRAWS while unconfirmed (free re-selection, Snipaste parity) and MOVES
+// only after ✓ confirmed. Handles resize in every state.
 const rectMouseDown = (e) => {
-  if (activeTool.value === 'select') { startMove(e); return; }
-  annotMouseDown(e);
+  if (activeTool.value !== 'select') { annotMouseDown(e); return; }
+  if (!confirmed.value) { startDraw(e); return; }
+  startMove(e);
+};
+// ✓ = confirm ONLY (no upload, no close) — flips the selection into the
+// editable state (arrow cursor, move/resize/annotate).
+const confirmSelection = () => {
+  if (hasRect.value) confirmed.value = true;
 };
 const startMove = (e) => {
   capAction.value = 'move';
@@ -1547,10 +1655,12 @@ const capMouseUp = () => {
   if (capAction.value === 'erase') { capAction.value = null; return; }
   capAction.value = null;
   // 6-P/6-R: a sub-threshold press-release (jitter-safe 8px) over a detected
-  // window snaps that window; any real drag keeps the drawn selection.
+  // window snaps that window; any real drag keeps the drawn selection. The
+  // snapped selection is unconfirmed (T1) — ✓ is the only confirmation.
   if (rect.value.w < 8 && rect.value.h < 8 && downHover.value) {
     const r = downHover.value;
     rect.value = { x: r.x, y: r.y, w: r.w, h: r.h };
+    confirmed.value = false;
     hoverRect.value = null;
   }
   downHover.value = null;
@@ -1735,8 +1845,11 @@ onMounted(() => {
     return;
   }
   if (params.get('capture') === '1') {
-    // This webview is the region-capture overlay (loaded by the screenshot hotkey).
+    // This webview is the region-capture overlay. T6: the window is PERSISTENT
+    // (hidden between captures) — each hotkey fires `capture-refresh`, which
+    // reloads the frozen frame and resets session state.
     captureMode.value = true;
+    listen('capture-refresh', () => { loadCaptureImage(); });
     // Capture-phase listener: fires before any child's stopPropagation (the
     // inline text editor stops keydown), and before focus quirks can eat Esc.
     window.addEventListener(
@@ -1752,7 +1865,17 @@ onMounted(() => {
         e.preventDefault();
         invoke('cancel_capture').catch((err) => console.error('cancel failed:', err));
       }
-      else if (e.key === 'Enter' && hasRect.value) confirmRect();
+      // T4: Ctrl+C copies the (annotated) image and exits — Snipaste parity.
+      else if (e.ctrlKey && e.code === 'KeyC' && hasRect.value) {
+        e.preventDefault();
+        actionCopy();
+      }
+      // T1: Enter is dual-purpose — confirm first, upload+inject once
+      // confirmed (same two-Enter total as before).
+      else if (e.key === 'Enter' && hasRect.value) {
+        if (!confirmed.value) confirmSelection();
+        else confirmRect();
+      }
       // v0.4.1 keys — matched via e.code (physical key): with a CJK IME
       // active, keydown e.key arrives as "Process" for letter/punct keys,
       // which silently killed WASD / Shift+R / `,` / `.` on IME systems.
@@ -1771,38 +1894,7 @@ onMounted(() => {
       { capture: true }
     );
     
-    // Fetch the captured screen image from Rust memory
-    invoke('get_captured_image')
-      .then(async (src) => {
-        capturedImageSrc.value = src;
-        // The annotation engine needs the frozen frame as a drawable Image
-        // (mosaic sampling + compositing). Fresh session state each time.
-        frozenImg.src = src;
-        annots.value = [];
-        undoStack.value = [];
-        redoStack.value = [];
-        activeTool.value = 'select';
-        redrawAnnots();
-        // Capture options + auto window detection + last-region preload
-        // (6-J/6-L), fetched before the reveal so nothing pops in.
-        try {
-          const cfg = await invoke('get_config');
-          ['capture_auto_detect', 'capture_show_hints',
-            'capture_border_width', 'capture_mask_opacity'].forEach((k) => {
-            if (cfg[k] !== undefined) config.value[k] = cfg[k];
-          });
-          captureHistory.value = cfg.capture_history || [];
-          if (cfg.capture_auto_detect) winRects.value = await invoke('get_window_rects');
-        } catch (_) {}
-        // The overlay window was built hidden (capture.rs visible:false)) so the
-        // WebView's initial white frame never shows. Reveal it only after the
-        // frozen frame has rendered → flash-free, Snipaste-style.
-        await nextTick();
-        try { await invoke('show_capture_overlay'); } catch (_) {}
-      })
-      .catch((e) => {
-        console.error("Failed to load captured image:", e);
-      });
+    loadCaptureImage();
     return;
   }
   loadConfig();

@@ -293,10 +293,25 @@ fn write_logs(path: String, state: tauri::State<'_, daemon::DaemonState>) -> Res
 }
 
 /// Save the (possibly annotated) composite image to a file (v0.4.2 toolbar).
+/// A bare filename (T5 one-click save) resolves into the default temp dir.
 #[tauri::command]
-fn write_image(path: String, data_url: String) -> Result<(), String> {
+fn write_image(app_handle: tauri::AppHandle, state: tauri::State<'_, daemon::DaemonState>, path: String, data_url: String) -> Result<String, String> {
+    use std::path::Path;
+    let full = if Path::new(&path).is_absolute() || path.contains('/') || path.contains('\\') {
+        std::path::PathBuf::from(&path)
+    } else {
+        let dir = state
+            .config
+            .read()
+            .ok()
+            .and_then(|c| c.save_dir.clone())
+            .unwrap_or_else(|| std::env::temp_dir().join("img2cli"));
+        dir.join(&path)
+    };
     let bytes = crate::clipboard::decode_data_url_bytes(&data_url)?;
-    std::fs::write(&path, bytes).map_err(|e| format!("Failed to write image file: {}", e))
+    std::fs::write(&full, bytes).map_err(|e| format!("Failed to write image file: {}", e))?;
+    daemon::log_message(&app_handle, &state.log_history, &format!("Image saved: {}", full.display()));
+    Ok(full.display().to_string())
 }
 
 /// Copy the composite image itself (not the path) to the clipboard (v0.4.2).
@@ -435,7 +450,7 @@ async fn pin_image(
     .decorations(false)
     .always_on_top(true)
     .skip_taskbar(true)
-    .resizable(false)
+    .resizable(true) // T7: edge-drag resize in addition to wheel zoom
     .visible(true)
     .inner_size(w.max(80.0), h.max(80.0))
     .build();
@@ -735,6 +750,10 @@ fn main() {
             }
             
             app.manage(daemon_state);
+
+            // T6: keep the capture overlay warm (hidden) so the screenshot
+            // hotkey skips window/webview cold start entirely.
+            capture::prewarm_capture_overlay(app.handle());
             
             // Build the system tray and context menu
             let show_i = MenuItem::with_id(app, "show", "Show Settings", true, None::<&str>)?;
