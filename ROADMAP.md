@@ -211,6 +211,7 @@ Open decisions: signing certificate budget (v1.0.0 stage); OCR scope = Windows O
 5. **贴图窗边缘 resize 无效 + 右键直接关闭**: 实测仍只能移动 + 滚轮缩放 — 窗口虽 `resizable(true)` (main.rs T7 注释),undecorated 窗口边缘命中不生效,需 WM_NCHITTEST 边缘热点或显式缩放手柄; 右键未弹菜单而是把贴图关掉了 (与 T7 实现不符, 待复现 — 嫌疑: 双击右键被算成 dblclick 关闭路径 / WebView2 默认上下文菜单)。
 6. **保存应免确认直达另存为**: 期望选区存在即可点 💾 直接弹"另存为"对话框,不需要先点 ✓; 实测必须先点对勾 (机制待复现)。注意 v0.4.4 T5 把 💾 改成了**无对话框一键落盘** — 与本次期望方向冲突,需决策: 恢复对话框 / 一键保存可配置 / 💾=一键、Shift+💾=另存为。
 7. **热键→浮层仍有可感知延迟** (常驻热窗 + JPEG 显示层之后仍不"秒出"): 剩余成本嫌疑 (工作假设): xcap 整屏抓取 (GDI BitBlt) → JPEG 编码 → base64 IPC → `<img>` 解码渲染,**全部完成后才 reveal** (`show_capture_overlay` 在图片上屏后调用)。根治 = M1-A 原生预冻结 (先 show 再贴图 / 更快的抓取路径),v0.4.5 优先级提升。
+8. **系统日志「复制全部」不工作** (2026-08-18 报告, 诊断中): 实测 — 点击后记事本粘贴为空; "复制全部→F8→Ctrl+V 到 Orca" 得到的是路径 (copy 模式注入覆写剪贴板, 属预期行为, 但等于 Copy All 的内容永远活不过 F8)。**已排除**: arboard 写入后丢失 (3.6.1 = 纯 Win32 立即写 + 5×5ms 重试, Ok 即持久, 已读源码) · OpenClipboard 竞争 (同上, 自带重试) · Orca 拒多行文本 (记事本 3 行 → Orca 粘贴 ✓) · 前端缺 toast 路径 (成功绿/失败红皆有)。关键悬案: 用户报告点击后**什么 toast 都没弹** — 若非 alt-tab 错过 (绿色 4s 自隐), 则 invoke 挂起/未执行 (嫌疑: 命令死锁 log_history 锁 / panic 吞掉 / 事件未绑定)。待复测: 前台盯角点击观察 toast 颜色与文字。
 
 ### S. Snipaste-grade element detection + Tab cycling (v0.4.0 follow-up)
 * **Wanted**: Snipaste detects many window ELEMENTS (button/input level) under one cursor position and cycles them with Tab.
