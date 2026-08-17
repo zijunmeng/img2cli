@@ -13,12 +13,25 @@ use crate::daemon::{self, DaemonState};
 pub fn capture_full_screen(app: &AppHandle, state: &DaemonState) -> Result<(), String> {
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     {
+        let started = std::time::Instant::now();
         let monitors = xcap::Monitor::all().map_err(|e| format!("List monitors failed: {e}"))?;
         let mon = monitors.first().ok_or_else(|| "No monitor found".to_string())?;
         let full = mon.capture_image().map_err(|e| format!("Capture screen failed: {e}"))?;
         if let Ok(mut lock) = state.captured_image.lock() {
             *lock = Some(full);
         }
+        // 6-U.9/6-U.7: how long the freeze itself takes (and at what res) —
+        // feeds both the dead-hotkey diagnosis and the overlay-lag work.
+        daemon::log_message(
+            app,
+            &state.log_history,
+            &format!(
+                "Screen frozen in {}ms ({}x{} physical)",
+                started.elapsed().as_millis(),
+                mon.width().unwrap_or(0),
+                mon.height().unwrap_or(0),
+            ),
+        );
 
         // Auto window detection (Roadmap 6-J): snapshot the on-screen window
         // rects alongside the frozen frame. CSS px = physical px / scale.
@@ -151,17 +164,27 @@ pub fn capture_full_screen(app: &AppHandle, state: &DaemonState) -> Result<(), S
 /// v0.4.4 (T6): the overlay window is created ONCE (hidden, at startup via
 /// `prewarm_capture_overlay`) and kept alive — the hotkey only refreshes it,
 /// so there is no window/webview cold start between hotkey and first paint.
-pub fn open_capture_overlay(app: &AppHandle) {
+pub fn open_capture_overlay(app: &AppHandle, state: &DaemonState) {
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     {
         if let Some(existing) = app.get_webview_window("capture") {
             use tauri::Emitter;
+            daemon::log_message(
+                app,
+                &state.log_history,
+                "Capture overlay: refreshing warm window (capture-refresh sent)",
+            );
             let _ = existing.emit_to("capture", "capture-refresh", ());
             return;
         }
         // First run (or the window died): build it now, hidden — the frontend
         // loads and invokes show_capture_overlay itself after rendering.
-        let _ = WebviewWindowBuilder::new(
+        daemon::log_message(
+            app,
+            &state.log_history,
+            "Capture overlay: warm window missing — rebuilding now",
+        );
+        let build = WebviewWindowBuilder::new(
             app,
             "capture",
             WebviewUrl::App("index.html?capture=1".into()),
@@ -174,19 +197,26 @@ pub fn open_capture_overlay(app: &AppHandle) {
         .skip_taskbar(true)
         .visible(false)
         .build();
+        if let Err(e) = build {
+            daemon::log_message(
+                app,
+                &state.log_history,
+                &format!("Capture overlay: window build failed: {}", e),
+            );
+        }
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
-        let _ = app;
+        let _ = (app, state);
     }
 }
 
 /// Build the hidden overlay window at startup (T6: instant hotkey response).
-pub fn prewarm_capture_overlay(app: &AppHandle) {
+pub fn prewarm_capture_overlay(app: &AppHandle, state: &DaemonState) {
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     {
         if app.get_webview_window("capture").is_none() {
-            let _ = WebviewWindowBuilder::new(
+            let build = WebviewWindowBuilder::new(
                 app,
                 "capture",
                 WebviewUrl::App("index.html?capture=1".into()),
@@ -199,11 +229,20 @@ pub fn prewarm_capture_overlay(app: &AppHandle) {
             .skip_taskbar(true)
             .visible(false)
             .build();
+            // 6-U.9: a failed prewarm used to be silent; the first hotkey then
+            // pays a full window build (or nothing shows at all).
+            if let Err(e) = build {
+                daemon::log_message(
+                    app,
+                    &state.log_history,
+                    &format!("Capture overlay: prewarm build failed: {}", e),
+                );
+            }
         }
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
-        let _ = app;
+        let _ = (app, state);
     }
 }
 
@@ -372,10 +411,21 @@ pub fn cancel_capture(app_handle: AppHandle) -> Result<(), String> {
 /// command because the capture window isn't in the capability allowlist, so the
 /// core `window.show()` IPC would be denied — custom commands aren't gated.
 #[tauri::command]
-pub fn show_capture_overlay(app_handle: AppHandle) {
-    if let Some(win) = app_handle.get_webview_window("capture") {
-        let _ = win.show();
-        let _ = win.set_focus();
+pub fn show_capture_overlay(app_handle: AppHandle, state: tauri::State<'_, DaemonState>) {
+    // 6-U.9: chain terminus — the overlay webview invokes this only after the
+    // frozen frame has rendered. This line appearing = the whole hotkey →
+    // capture → emit → render → show chain worked; anything above it that is
+    // missing points at the broken link.
+    let Some(win) = app_handle.get_webview_window("capture") else {
+        daemon::log_message(&app_handle, &state.log_history, "Capture overlay: show requested but window not found");
+        return;
+    };
+    match win.show() {
+        Ok(()) => {
+            let _ = win.set_focus();
+            daemon::log_message(&app_handle, &state.log_history, "Capture overlay shown");
+        }
+        Err(e) => daemon::log_message(&app_handle, &state.log_history, &format!("Capture overlay: show failed: {}", e)),
     }
 }
 

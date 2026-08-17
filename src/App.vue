@@ -575,7 +575,7 @@ import { ZH, THEME_ZH } from './strings.js';
 
 // UI localization (Milestone 6-I): keys are the English source strings; zh-CN
 // swaps them via the ZH dictionary, anything else shows the key as-is.
-const APP_VERSION = '0.4.4';
+const APP_VERSION = '0.4.5';
 const lang = ref('zh-CN');
 const t = (s) => (lang.value === 'zh-CN' && Object.prototype.hasOwnProperty.call(ZH, s) ? ZH[s] : s);
 
@@ -963,12 +963,30 @@ const saveSettings = async () => {
   }
 };
 
+// CJK IMEs deliver letter/punct keydowns with e.key === "Process" (the same
+// quirk that killed the overlay's WASD) — recover the physical key from
+// e.code so Alt+X etc. can be recorded while an IME is active (6-U.9③).
+// Names produced here are all accepted by global-hotkey's parser ("X" and
+// "KEYX" alike, "," and "COMMA" alike — global-hotkey 0.8.0 hotkey.rs).
+const keyFromEvent = (e) => {
+  if (e.key !== 'Process') return e.key;
+  const c = e.code || '';
+  if (c.startsWith('Key')) return c.slice(3);    // KeyX -> X
+  if (c.startsWith('Digit')) return c.slice(5);  // Digit1 -> 1
+  if (c.startsWith('Numpad')) return c.slice(6); // Numpad7 -> 7
+  return {
+    Comma: ',', Period: '.', Slash: '/', Semicolon: ';', Quote: "'",
+    BracketLeft: '[', BracketRight: ']', Backquote: '`', Minus: '-',
+    Equal: '=', Backslash: '\\',
+  }[c] || c; // F1..F12 / Space / arrows pass through as-is
+};
+
 // Global hotkey recorder: click the field, then press a key combo.
 const recordHotkeyKeydown = (e) => {
   if (!recordingHotkey.value) return;
   e.preventDefault();
   if (e.key === 'Escape') { e.target.blur(); return; }
-  
+
   const mods = [];
   if (e.ctrlKey) mods.push('Control');
   if (e.altKey) mods.push('Alt');
@@ -980,7 +998,7 @@ const recordHotkeyKeydown = (e) => {
     return;
   }
 
-  let key = e.key;
+  let key = keyFromEvent(e);
   if (key === ' ') {
     key = 'Space';
   } else if (key.length === 1) {
@@ -1012,7 +1030,7 @@ const recordShotKeydown = (e) => {
     return;
   }
 
-  let key = e.key;
+  let key = keyFromEvent(e);
   if (key === ' ') {
     key = 'Space';
   } else if (key.length === 1) {

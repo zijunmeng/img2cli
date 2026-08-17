@@ -183,19 +183,42 @@ fn save_config(
         }
     }
 
-    // Re-register the screenshot hotkey if it changed
+    // Re-register the screenshot hotkey if it changed. Registration failure
+    // (combo held by another app/instance) is logged and reported — it used
+    // to vanish silently under `is_ok()` (6-U.9①).
     if old_shot != config.screenshot_hotkey {
         let manager = app_handle.global_shortcut();
-        if let Ok(old_s) = tauri_plugin_global_shortcut::Shortcut::from_str(&old_shot) {
+        let old_shot_parsed = tauri_plugin_global_shortcut::Shortcut::from_str(&old_shot).ok();
+        if let Some(old_s) = old_shot_parsed {
             let _ = manager.unregister(old_s);
         }
         match tauri_plugin_global_shortcut::Shortcut::from_str(&config.screenshot_hotkey) {
             Ok(new_s) => {
-                if manager.register(new_s).is_ok() {
-                    daemon::log_message(&app_handle, &state.log_history, &format!("Registered screenshot shortcut: {}", config.screenshot_hotkey));
+                if let Err(e) = manager.register(new_s) {
+                    // Rollback: restore the previous combo so the user isn't
+                    // left with NO working screenshot hotkey.
+                    if let Some(old_s) = old_shot_parsed {
+                        let _ = manager.register(old_s);
+                    }
+                    daemon::log_message(
+                        &app_handle,
+                        &state.log_history,
+                        &format!(
+                            "Error: Failed to register screenshot hotkey '{}': {:?}. Restored old hotkey.",
+                            config.screenshot_hotkey, e
+                        ),
+                    );
+                    return Err(format!("Failed to register screenshot hotkey: {:?}", e));
                 }
+                daemon::log_message(&app_handle, &state.log_history, &format!("Registered screenshot shortcut: {}", config.screenshot_hotkey));
             }
-            Err(_) => daemon::log_message(&app_handle, &state.log_history, &format!("Warning: Invalid screenshot hotkey: {}", config.screenshot_hotkey)),
+            Err(_) => {
+                if let Some(old_s) = old_shot_parsed {
+                    let _ = manager.register(old_s);
+                }
+                daemon::log_message(&app_handle, &state.log_history, &format!("Warning: Invalid screenshot hotkey: {}", config.screenshot_hotkey));
+                return Err("Invalid screenshot hotkey format".to_string());
+            }
         }
     }
 
@@ -270,13 +293,29 @@ fn get_log_history(state: tauri::State<'_, daemon::DaemonState>) -> Result<Vec<S
 }
 
 /// Copy the full log history to the clipboard (Milestone 6-F).
+/// 6-U.8 hardening: the outcome is logged — a hung/denied invoke or a silent
+/// clipboard failure is distinguishable in System Logs after the fact.
 #[tauri::command]
-fn copy_logs(state: tauri::State<'_, daemon::DaemonState>) -> Result<(), String> {
+fn copy_logs(app_handle: tauri::AppHandle, state: tauri::State<'_, daemon::DaemonState>) -> Result<(), String> {
     let logs = state
         .log_history
         .lock()
         .map_err(|_| "Failed to acquire log history lock".to_string())?;
-    crate::injector::copy_to_clipboard(&logs.join("\n"))
+    let text = logs.join("\n");
+    match crate::injector::copy_to_clipboard(&text) {
+        Ok(()) => {
+            daemon::log_message(
+                &app_handle,
+                &state.log_history,
+                &format!("Logs copied to clipboard ({} chars)", text.chars().count()),
+            );
+            Ok(())
+        }
+        Err(e) => {
+            daemon::log_message(&app_handle, &state.log_history, &format!("Failed to copy logs: {}", e));
+            Err(e)
+        }
+    }
 }
 
 /// Write the full log history to a file path chosen by the user via the
@@ -675,6 +714,14 @@ fn main() {
                         }
                         if let Ok(ss) = tauri_plugin_global_shortcut::Shortcut::from_str(&cfg_shot) {
                             if shortcut == &ss {
+                                // 6-U.9 observability: one line per key stage of
+                                // the capture chain — a press that produces NO
+                                // lines means the handler itself never ran.
+                                daemon::log_message(
+                                    app_handle,
+                                    &state.log_history,
+                                    &format!("Screenshot hotkey received: {}", cfg_shot),
+                                );
                                 if let Err(e) = capture::capture_full_screen(app_handle, &state) {
                                     daemon::log_message(
                                         app_handle,
@@ -682,7 +729,7 @@ fn main() {
                                         &format!("Failed to capture screen: {}", e),
                                     );
                                 } else {
-                                    capture::open_capture_overlay(app_handle);
+                                    capture::open_capture_overlay(app_handle, &state);
                                 }
                             }
                         }
@@ -723,21 +770,57 @@ fn main() {
             // Start the daemon thread
             let daemon_state = daemon::start_daemon(app.handle().clone(), initial_config.clone());
             
-            // Register initial global shortcut
+            // Register initial global shortcuts. A registration failure here
+            // (RegisterHotKey is exclusive system-wide — another instance or
+            // app holding the combo) used to be swallowed with `let _ =`,
+            // leaving the hotkey dead with zero trace (6-U.9①). Both hotkeys
+            // now log success AND failure.
             use std::str::FromStr;
             use tauri_plugin_global_shortcut::GlobalShortcutExt;
-            if let Ok(shortcut) = tauri_plugin_global_shortcut::Shortcut::from_str(&initial_config.global_hotkey) {
-                let _ = app.handle().global_shortcut().register(shortcut);
-            } else {
-                daemon::log_message(
+            match tauri_plugin_global_shortcut::Shortcut::from_str(&initial_config.global_hotkey) {
+                Ok(sc) => match app.handle().global_shortcut().register(sc) {
+                    Ok(()) => daemon::log_message(
+                        &app.handle(),
+                        &daemon_state.log_history,
+                        &format!("Registered inject shortcut: {}", initial_config.global_hotkey),
+                    ),
+                    Err(e) => daemon::log_message(
+                        &app.handle(),
+                        &daemon_state.log_history,
+                        &format!(
+                            "Warning: Failed to register inject shortcut '{}' ({}). Another instance/app may be using it.",
+                            initial_config.global_hotkey, e
+                        ),
+                    ),
+                },
+                Err(_) => daemon::log_message(
                     &app.handle(),
                     &daemon_state.log_history,
                     &format!("Warning: Invalid initial global hotkey: {}", initial_config.global_hotkey),
-                );
+                ),
             }
             // Register the screenshot (region-capture) hotkey
-            if let Ok(shot) = tauri_plugin_global_shortcut::Shortcut::from_str(&initial_config.screenshot_hotkey) {
-                let _ = app.handle().global_shortcut().register(shot);
+            match tauri_plugin_global_shortcut::Shortcut::from_str(&initial_config.screenshot_hotkey) {
+                Ok(sc) => match app.handle().global_shortcut().register(sc) {
+                    Ok(()) => daemon::log_message(
+                        &app.handle(),
+                        &daemon_state.log_history,
+                        &format!("Registered screenshot shortcut: {}", initial_config.screenshot_hotkey),
+                    ),
+                    Err(e) => daemon::log_message(
+                        &app.handle(),
+                        &daemon_state.log_history,
+                        &format!(
+                            "Warning: Failed to register screenshot shortcut '{}' ({}). Another instance/app may be using it.",
+                            initial_config.screenshot_hotkey, e
+                        ),
+                    ),
+                },
+                Err(_) => daemon::log_message(
+                    &app.handle(),
+                    &daemon_state.log_history,
+                    &format!("Warning: Invalid screenshot hotkey: {}", initial_config.screenshot_hotkey),
+                ),
             }
 
             // Route startup load error log if present
@@ -749,11 +832,12 @@ fn main() {
                 );
             }
             
-            app.manage(daemon_state);
-
             // T6: keep the capture overlay warm (hidden) so the screenshot
-            // hotkey skips window/webview cold start entirely.
-            capture::prewarm_capture_overlay(app.handle());
+            // hotkey skips window/webview cold start entirely. Runs BEFORE
+            // app.manage() moves daemon_state into the app state container.
+            capture::prewarm_capture_overlay(app.handle(), &daemon_state);
+
+            app.manage(daemon_state);
             
             // Build the system tray and context menu
             let show_i = MenuItem::with_id(app, "show", "Show Settings", true, None::<&str>)?;
