@@ -199,6 +199,8 @@ Open decisions: signing certificate budget (v1.0.0 stage); OCR scope = Windows O
 3. **橡皮擦应为"逐段擦除"**: Snipaste 是擦除笔迹被扫过的**片段**(polyline 在命中处分裂),不是整对象删除。当前对象级删除不符合预期;需实现 stroke-splitting。
 4. **Ctrl+C = 复制图像并退出**: 选区存在时 Ctrl+C 直接把 (含标注的) 图像复制到剪贴板并关闭 overlay — Snipaste 行为,发往任意处的入口。
 5. **一键保存**: 点击 💾 不弹路径对话框 — 自动命名 `img2cli_YYYY-MM-DD_HH-mm-ss` 存入默认目录 (save_dir),保存后退出 overlay。(Snipaste: `Snipaste_2026-08-17_16-26-37` 格式,直接落盘;是否可配置默认保存目录随后议。)
+6. **截图浮层秒出** (Snipaste 按下热键边框瞬间出现,我们有可感知延迟): 现路径 = 建窗 + 整屏 PNG base64 编码 (~MB 级 IPC) + webview 加载渲染后才 reveal。方向: ①**overlay 窗口常驻隐藏** (启动即建,热键只 show+设图,省掉建窗/webview 冷启动) ②缩小 IPC 载荷 (整屏 base64 是大头; JPEG 或写临时文件走 asset 协议)。
+7. **贴屏窗交互残缺**: 右键应弹**菜单** (至少: 复制图片 / 销毁;可加 另存为/置顶切换),当前右键=直接关闭;尺寸调节不应只有滚轮 — 边缘拖拽 resize (窗口 resizable + 边缘热点)。
 
 ### S. Snipaste-grade element detection + Tab cycling (v0.4.0 follow-up)
 * **Wanted**: Snipaste detects many window ELEMENTS (button/input level) under one cursor position and cycles them with Tab.
