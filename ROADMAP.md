@@ -12,9 +12,9 @@ This file tracks future architecture improvements, user experience features, and
 |---|---|---|
 | v0.4.1 | Feel + defects | 6-R state machine v3 · 6-S element detect + Tab cycling · **overlay keys: Shift+R reuse last region, `,`/`.` cycle region history (last 8), WASD nudge cursor 1px** · IME×Direct real-test (force Copy per-host if conflicting) · host_policy → process-name detection · engineering cleanup (delete legacy `src/` CLI tree, orphan plugin-shell dep, dead_code, themed slider track) |
 | v0.4.2 | **Annotation editor + action toolbar** | Toolset (user-final 2026-08-16): **箭头 arrow · 画笔 pen · 马克笔 marker/highlighter (multiply blend) · 马赛克 mosaic (incl. secure mode) · 文本 text · 圆形/矩形 circle/rect · 橡皮擦 object-eraser (alpha hit-test click-to-delete) · 撤销/重做 undo/redo (snapshot stack)** + color/thickness pickers — flameshot five-mechanism blueprint (`docs/REF_mining_20260809.md` §A) — PLUS the confirmed-selection action toolbar, Snipaste-style: **icon buttons with hover tooltips** for 📌 贴到屏幕 (pin, pulled forward from v0.4.3; ShareX interaction spec §C, webview-based first cut) / 💾 保存到文件 (dialog save + write_image) / 📋 复制到剪贴板 / ✓ upload+inject (existing flow) |
-| v0.4.3 | Multi-monitor (+ pin upgrade) | per-monitor capture & coordinate mapping · optional native-window pin upgrade if the webview pin proves memory-heavy |
-| v0.4.4 | Performance + intelligence | SSH keep-alive pool (<200ms uploads, M1-B) · Rust-native pre-emptive freeze (M1-A) · L-tail (cursor capture / focus-loss exit / sound) · OCR→markdown code block (Windows OCR Runtime first) · **长截屏 scrolling capture** (user-requested 2026-08-16: select region → loop {PostMessage WM_MOUSEWHEEL to target, Chromium needs SendInput fallback} → frame capture → row-overlap stitching → long image into the existing annotate/pin/upload pipeline; ShareX's implementation in `ref/pkg/ShareX-develop` is the reference) |
-| v0.4.5 | Buffer | regression fixes only — the goal is for this version to be EMPTY |
+| v0.4.3 | 修复批 (re-planned; multi-monitor → v0.4.5) | 💾/📌 死因=**ACL** (overlay 窗不在 capabilities → JS 插件调用被拒) → Rust 侧自定义命令 + 日志 · Esc 捕获阶段 + 右键退出 · 马赛克拖拽归一化 · 橡皮擦命中域 + 扫擦 |
+| v0.4.4 | Snipaste 交互对齐 — 6-T 七项 (re-planned; perf batch → v0.4.5) | ✓ 确认态模型 (✓=纯确认, ⬆=上传) · 文本焦点修复 · 笔迹分裂擦除 · Ctrl+C 复制退出 · 一键自动命名保存 · **常驻热窗 + JPEG 显示层** · 贴屏右键菜单 + 边缘缩放 |
+| v0.4.5 | **最后一格, 全部清债** (re-planned 2026-08-17) | **多显示器** (per-monitor freeze + 坐标映射, 现只 `monitors.first()`) · **SSH 保活池** (<200ms uploads, M1-B) · **原生预冻结** (M1-A; 6-U.7 实测热窗后仍有延迟 → 优先级↑) · **OCR→markdown 代码块** (Windows OCR Runtime first) · **长截屏 scrolling capture** (select region → loop {PostMessage WM_MOUSEWHEEL to target, Chromium needs SendInput fallback} → frame capture → row-overlap stitching → long image into the existing annotate/pin/upload pipeline; ShareX's implementation in `ref/pkg/ShareX-develop` is the reference) · L-tail (cursor capture / focus-loss exit / sound) · **6-U: v0.4.4 用户反馈批** |
 | v1.0.0 | Ship | code signing (⚠️ requires purchasing a certificate — user decision), final polish, docs |
 
 Open decisions: signing certificate budget (v1.0.0 stage); OCR scope = Windows OCR Runtime first, macOS Vision post-1.0 (assumed OK).
@@ -201,6 +201,16 @@ Open decisions: signing certificate budget (v1.0.0 stage); OCR scope = Windows O
 5. **一键保存**: 点击 💾 不弹路径对话框 — 自动命名 `img2cli_YYYY-MM-DD_HH-mm-ss` 存入默认目录 (save_dir),保存后退出 overlay。(Snipaste: `Snipaste_2026-08-17_16-26-37` 格式,直接落盘;是否可配置默认保存目录随后议。)
 6. **截图浮层秒出** (Snipaste 按下热键边框瞬间出现,我们有可感知延迟): 现路径 = 建窗 + 整屏 PNG base64 编码 (~MB 级 IPC) + webview 加载渲染后才 reveal。方向: ①**overlay 窗口常驻隐藏** (启动即建,热键只 show+设图,省掉建窗/webview 冷启动) ②缩小 IPC 载荷 (整屏 base64 是大头; JPEG 或写临时文件走 asset 协议)。
 7. **贴屏窗交互残缺**: 右键应弹**菜单** (至少: 复制图片 / 销毁;可加 另存为/置顶切换),当前右键=直接关闭;尺寸调节不应只有滚轮 — 边缘拖拽 resize (窗口 resizable + 边缘热点)。
+
+### U. v0.4.4 用户实测报告 (2026-08-18, 记录待修 — 全部进 v0.4.5)
+
+1. **Tab 之后无法再自由选区**: 实测 Tab 切换候选后,选区即被"定死",不能再任意拖拽重画; Snipaste 的 Tab 只是切换高亮候选,之后仍可随时拖拽自由选区/继续 Tab。(工作假设: 我们 Tab 时立即把候选固化为选区并清掉 hover 高亮;是否真锁死编辑、锁在哪一步,待复现。)
+2. **橡皮擦没有圆圈光标, 体感仍是"点击删对象"**: 期望 Snipaste 式 — 选中橡皮擦后出现 **~14px 的圆圈光标** (圈 = 实际擦除范围),按住扫过之处逐点擦除。现状: 无任何半径视觉反馈 (v0.4.4 T3 笔迹分裂已上线但 ERASE_RADIUS=10 看不见; 形状/文本/马赛克整删属设计)。需: 圆圈光标 (半径=擦除半径, 跟随鼠标) + 笔迹逐段消失的可见性验证。
+3. **画笔/马克笔 Shift = 直线**: 按住 Shift 拖拽应绘制从落点到当前点的直线 (通用绘图惯例)。
+4. **粗细/大小调节不足**: 画笔/马克笔线宽当前只有共享 toolSize 1–8,范围太窄; 橡皮擦半径固定 10px,未接进工具栏 −/+。需: 线宽档位扩大 (或按工具独立记忆), 橡皮擦大小可调。
+5. **贴图窗边缘 resize 无效 + 右键直接关闭**: 实测仍只能移动 + 滚轮缩放 — 窗口虽 `resizable(true)` (main.rs T7 注释),undecorated 窗口边缘命中不生效,需 WM_NCHITTEST 边缘热点或显式缩放手柄; 右键未弹菜单而是把贴图关掉了 (与 T7 实现不符, 待复现 — 嫌疑: 双击右键被算成 dblclick 关闭路径 / WebView2 默认上下文菜单)。
+6. **保存应免确认直达另存为**: 期望选区存在即可点 💾 直接弹"另存为"对话框,不需要先点 ✓; 实测必须先点对勾 (机制待复现)。注意 v0.4.4 T5 把 💾 改成了**无对话框一键落盘** — 与本次期望方向冲突,需决策: 恢复对话框 / 一键保存可配置 / 💾=一键、Shift+💾=另存为。
+7. **热键→浮层仍有可感知延迟** (常驻热窗 + JPEG 显示层之后仍不"秒出"): 剩余成本嫌疑 (工作假设): xcap 整屏抓取 (GDI BitBlt) → JPEG 编码 → base64 IPC → `<img>` 解码渲染,**全部完成后才 reveal** (`show_capture_overlay` 在图片上屏后调用)。根治 = M1-A 原生预冻结 (先 show 再贴图 / 更快的抓取路径),v0.4.5 优先级提升。
 
 ### S. Snipaste-grade element detection + Tab cycling (v0.4.0 follow-up)
 * **Wanted**: Snipaste detects many window ELEMENTS (button/input level) under one cursor position and cycles them with Tab.
