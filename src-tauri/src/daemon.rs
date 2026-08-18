@@ -57,10 +57,13 @@ pub struct DaemonState {
     pub last_upload: Arc<std::sync::Mutex<Option<LastUpload>>>,
     /// Pin-to-screen windows (v0.4.2): pin id → composited image data URL.
     pub pins: Arc<std::sync::Mutex<std::collections::HashMap<u32, String>>>,
-    /// One-shot gate for the capture-overlay dead-webview rebuild (v0.4.7):
-    /// swap to true only if it was false, so rapid hotkey presses can't
-    /// launch concurrent rebuilds.
-    pub capture_rebuild_gate: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// Capture-overlay liveness counters (v0.4.8): emits = capture-refresh
+    /// events sent to the warm window; shows = times the overlay webview
+    /// completed render→show. emits>shows at press time means the previous
+    /// refresh never landed — the warm webview is dead and the press-path
+    /// rebuilds it (press-paced; v0.4.7's background watchdog froze the app).
+    pub overlay_emits: std::sync::atomic::AtomicU32,
+    pub overlay_shows: std::sync::atomic::AtomicU32,
 }
 
 /// A completed background upload, keyed by the fingerprint of the raw image.
@@ -98,6 +101,19 @@ pub fn log_message(app_handle: &AppHandle, log_history: &Arc<Mutex<Vec<String>>>
         history.push(formatted.clone());
         if history.len() > 100 {
             history.remove(0); // Keep last 100 log lines
+        }
+    }
+
+    // v0.4.8: mirror to a file — the in-memory history dies with the process,
+    // and a main-thread freeze makes the UI unreadable (2026-08-18 field
+    // case). %TEMP%/img2cli/daemon.log survives anything short of disk loss.
+    {
+        use std::io::Write as _;
+        let dir = std::env::temp_dir().join("img2cli");
+        if std::fs::create_dir_all(&dir).is_ok() {
+            if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(dir.join("daemon.log")) {
+                let _ = writeln!(f, "{}", formatted);
+            }
         }
     }
 
@@ -190,7 +206,8 @@ pub fn start_daemon(app_handle: AppHandle, config: AppConfig) -> DaemonState {
         window_rects: Arc::new(std::sync::Mutex::new(Vec::new())),
         last_upload: Arc::new(std::sync::Mutex::new(None)),
         pins: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
-        capture_rebuild_gate: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        overlay_emits: std::sync::atomic::AtomicU32::new(0),
+        overlay_shows: std::sync::atomic::AtomicU32::new(0),
     }
 }
 
