@@ -1,1 +1,1 @@
-{}
+{"default":{"identifier":"default","description":"default window capability configuration","local":true,"windows":["main"],"permissions":["core:default","dialog:default"]}}

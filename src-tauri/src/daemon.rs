@@ -57,6 +57,10 @@ pub struct DaemonState {
     pub last_upload: Arc<std::sync::Mutex<Option<LastUpload>>>,
     /// Pin-to-screen windows (v0.4.2): pin id → composited image data URL.
     pub pins: Arc<std::sync::Mutex<std::collections::HashMap<u32, String>>>,
+    /// One-shot gate for the capture-overlay dead-webview rebuild (v0.4.7):
+    /// swap to true only if it was false, so rapid hotkey presses can't
+    /// launch concurrent rebuilds.
+    pub capture_rebuild_gate: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 /// A completed background upload, keyed by the fingerprint of the raw image.
@@ -186,6 +190,7 @@ pub fn start_daemon(app_handle: AppHandle, config: AppConfig) -> DaemonState {
         window_rects: Arc::new(std::sync::Mutex::new(Vec::new())),
         last_upload: Arc::new(std::sync::Mutex::new(None)),
         pins: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
+        capture_rebuild_gate: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
     }
 }
 

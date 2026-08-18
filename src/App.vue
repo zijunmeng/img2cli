@@ -199,7 +199,7 @@
                   <span v-else class="text-[var(--color-text-secondary)]/80 normal-case font-normal ml-1">{{ t('(click & press keys)') }}</span>
                 </label>
                 <div class="flex gap-2">
-                  <input type="text" readonly :value="config.global_hotkey" @focus="recordingHotkey = true" @blur="recordingHotkey = false" @keydown="recordHotkeyKeydown" :class="['flex-1 bg-[var(--bg-input)] border rounded-xl px-3 py-2 text-sm focus:outline-none text-[var(--color-text-primary)] font-mono cursor-pointer transition-all', recordingHotkey ? 'border-[var(--color-accent)] shadow-[0_0_0_2px_rgba(41,151,255,0.2)]' : 'border-[var(--color-input-border)] focus:border-[var(--color-accent)]']" />
+                  <input type="text" readonly :value="config.global_hotkey" @focus="recordingHotkey = true" @blur="recordingHotkey = false" @keydown="recordHotkeyKeydown" @keyup="recordHotkeyKeyup" :class="['flex-1 bg-[var(--bg-input)] border rounded-xl px-3 py-2 text-sm focus:outline-none text-[var(--color-text-primary)] font-mono cursor-pointer transition-all', recordingHotkey ? 'border-[var(--color-accent)] shadow-[0_0_0_2px_rgba(41,151,255,0.2)]' : 'border-[var(--color-input-border)] focus:border-[var(--color-accent)]']" />
                   <button type="button" @click="config.global_hotkey = 'Alt+V'" class="px-3 py-2 text-xs font-medium bg-[var(--bg-button)] hover:bg-[var(--bg-button-hover)] text-[var(--color-text-secondary)] rounded-xl transition-colors border border-[var(--color-input-border)]">{{ t('Reset') }}</button>
                 </div>
               </div>
@@ -210,7 +210,7 @@
                   <span v-else class="text-[var(--color-text-secondary)]/80 normal-case font-normal ml-1">{{ t('(region capture)') }}</span>
                 </label>
                 <div class="flex gap-2">
-                  <input type="text" readonly :value="config.screenshot_hotkey" @focus="recordingShot = true" @blur="recordingShot = false" @keydown="recordShotKeydown" :class="['flex-1 bg-[var(--bg-input)] border rounded-xl px-3 py-2 text-sm focus:outline-none text-[var(--color-text-primary)] font-mono cursor-pointer transition-all', recordingShot ? 'border-[var(--color-accent)] shadow-[0_0_0_2px_rgba(41,151,255,0.2)]' : 'border-[var(--color-input-border)] focus:border-[var(--color-accent)]']" />
+                  <input type="text" readonly :value="config.screenshot_hotkey" @focus="recordingShot = true" @blur="recordingShot = false" @keydown="recordShotKeydown" @keyup="recordShotKeyup" :class="['flex-1 bg-[var(--bg-input)] border rounded-xl px-3 py-2 text-sm focus:outline-none text-[var(--color-text-primary)] font-mono cursor-pointer transition-all', recordingShot ? 'border-[var(--color-accent)] shadow-[0_0_0_2px_rgba(41,151,255,0.2)]' : 'border-[var(--color-input-border)] focus:border-[var(--color-accent)]']" />
                   <button type="button" @click="config.screenshot_hotkey = 'Alt+Shift+S'" class="px-3 py-2 text-xs font-medium bg-[var(--bg-button)] hover:bg-[var(--bg-button-hover)] text-[var(--color-text-secondary)] rounded-xl transition-colors border border-[var(--color-input-border)]">{{ t('Reset') }}</button>
                 </div>
               </div>
@@ -330,7 +330,7 @@
           </div>
 
           <div class="flex justify-end pt-2">
-            <button @click="saveSettings" class="flex items-center gap-2 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white px-6 py-2.5 rounded-full font-semibold shadow-sm shadow-[var(--color-accent)]/15 active:scale-[0.98] transition-all duration-150 text-sm">
+            <button @click="saveSettings" :disabled="!configLoaded" :title="configLoaded ? '' : t('Config not loaded — saving disabled to protect existing settings')" class="flex items-center gap-2 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] disabled:opacity-40 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded-full font-semibold shadow-sm shadow-[var(--color-accent)]/15 active:scale-[0.98] transition-all duration-150 text-sm">
               {{ t('Save Settings') }}
             </button>
           </div>
@@ -414,7 +414,7 @@
           </div>
 
           <div class="flex justify-end pt-2">
-            <button @click="saveSettings" class="flex items-center gap-2 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white px-6 py-2.5 rounded-full font-semibold shadow-sm shadow-[var(--color-accent)]/15 active:scale-[0.98] transition-all duration-150 text-sm">
+            <button @click="saveSettings" :disabled="!configLoaded" :title="configLoaded ? '' : t('Config not loaded — saving disabled to protect existing settings')" class="flex items-center gap-2 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] disabled:opacity-40 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded-full font-semibold shadow-sm shadow-[var(--color-accent)]/15 active:scale-[0.98] transition-all duration-150 text-sm">
               {{ t('Save Settings') }}
             </button>
           </div>
@@ -575,7 +575,7 @@ import { ZH, THEME_ZH } from './strings.js';
 
 // UI localization (Milestone 6-I): keys are the English source strings; zh-CN
 // swaps them via the ZH dictionary, anything else shows the key as-is.
-const APP_VERSION = '0.4.6';
+const APP_VERSION = '0.4.7';
 const lang = ref('zh-CN');
 const t = (s) => (lang.value === 'zh-CN' && Object.prototype.hasOwnProperty.call(ZH, s) ? ZH[s] : s);
 
@@ -924,10 +924,14 @@ const setAsDefault = (index) => {
   showToast(`"${tgt.match_pattern}" ${t('set as the default SSH host.')}`);
 };
 
-// Load Configurations
+// Load Configurations. configLoaded gates Save: when get_config fails the
+// form holds JS defaults, and saving those would wipe the user's config.toml
+// with defaults (6-U.10③ — happened during the v0.4.5 regression window).
+const configLoaded = ref(false);
 const loadConfig = async () => {
   try {
     const data = await invoke('get_config');
+    configLoaded.value = true;
     // Ensure all subfields exist to avoid null errors
     if (!data.ssh) {
       data.ssh = { enabled: false, host: '', port: 22, username: '', remote_dir: '', match_pattern: '', remember_password: true };
@@ -947,12 +951,17 @@ const loadConfig = async () => {
     lastSavedGlobalHotkey.value = data.global_hotkey || '';
     lastSavedScreenshotHotkey.value = data.screenshot_hotkey || '';
   } catch (err) {
+    configLoaded.value = false;
     showToast(`${t('Failed to load configuration:')} ${err}`, true);
   }
 };
 
 // Save Configurations
 const saveSettings = async () => {
+  if (!configLoaded.value) {
+    showToast(t('Config not loaded — saving disabled to protect existing settings'), true);
+    return;
+  }
   try {
     await invoke('save_config', { config: config.value });
     lastSavedGlobalHotkey.value = config.value.global_hotkey;
@@ -1043,6 +1052,30 @@ const recordShotKeydown = (e) => {
   config.value.screenshot_hotkey = mods.join('+');
   e.target.blur();
 };
+
+// IME fallback (6-U.10②): when the IME swallows the letter keydown entirely
+// inside an <input>, only a bare "Alt" ever lands in the field and saving is
+// rejected ("Invalid Screenshot hotkey 'Alt'"). The keyUP usually survives
+// composition — if one arrives while the pending value is bare modifiers,
+// finalize the combo from it.
+const BARE_MODS = /^(Control|Alt|Shift|Super)(\+(Control|Alt|Shift|Super))*$/;
+const keyupFinalize = (e, which) => {
+  const recording = which === 'global' ? recordingHotkey.value : recordingShot.value;
+  if (!recording) return;
+  const cur = which === 'global' ? config.value.global_hotkey : config.value.screenshot_hotkey;
+  if (!BARE_MODS.test(cur)) return; // nothing pending
+  if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return;
+  let key = keyFromEvent(e);
+  if (!key) return;
+  key = key === ' ' ? 'Space' : key.length === 1 ? key.toUpperCase() : key.charAt(0).toUpperCase() + key.slice(1);
+  const mods = cur.split('+');
+  mods.push(key);
+  if (which === 'global') config.value.global_hotkey = mods.join('+');
+  else config.value.screenshot_hotkey = mods.join('+');
+  e.target.blur();
+};
+const recordHotkeyKeyup = (e) => keyupFinalize(e, 'global');
+const recordShotKeyup = (e) => keyupFinalize(e, 'shot');
 
 // ---- Region-capture overlay (the ?capture=1 window) ----
 // Snipaste-style: drag to draw a selection; it then persists with 8 resize

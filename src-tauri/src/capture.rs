@@ -175,6 +175,76 @@ pub fn open_capture_overlay(app: &AppHandle, state: &DaemonState) {
                 "Capture overlay: refreshing warm window (capture-refresh sent)",
             );
             let _ = existing.emit_to("capture", "capture-refresh", ());
+            // v0.4.7 dead-webview watchdog (6-U.9② field evidence: the event
+            // is sent, "Capture overlay shown" never comes). If the window is
+            // still hidden 400ms later the webview is dead/hung — rebuild it.
+            // A fresh webview self-loads at mount (captured_image is already
+            // set) and shows itself; the gate stops stacked rebuilds while
+            // the user mashes the hotkey.
+            let app2 = app.clone();
+            let log_hist = std::sync::Arc::clone(&state.log_history);
+            let gate = std::sync::Arc::clone(&state.capture_rebuild_gate);
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(400));
+                let still_hidden = app2
+                    .get_webview_window("capture")
+                    .map(|w| !w.is_visible().unwrap_or(false))
+                    .unwrap_or(false);
+                if !still_hidden {
+                    return; // healthy: the frontend rendered and showed it
+                }
+                if gate.swap(true, std::sync::atomic::Ordering::SeqCst) {
+                    return; // a rebuild is already in flight
+                }
+                daemon::log_message(
+                    &app2,
+                    &log_hist,
+                    "Capture overlay: webview unresponsive — rebuilding overlay window",
+                );
+                let app3 = app2.clone();
+                let log2 = std::sync::Arc::clone(&log_hist);
+                let gate2 = std::sync::Arc::clone(&gate);
+                let _ = app2.run_on_main_thread(move || {
+                    if let Some(w) = app3.get_webview_window("capture") {
+                        let _ = w.close();
+                    }
+                    // Window destruction is asynchronous — give the label a
+                    // beat to free before reusing it.
+                    let app4 = app3.clone();
+                    std::thread::spawn(move || {
+                        std::thread::sleep(std::time::Duration::from_millis(150));
+                        let app5 = app4.clone();
+                        let _ = app4.run_on_main_thread(move || {
+                            let build = WebviewWindowBuilder::new(
+                                &app5,
+                                "capture",
+                                WebviewUrl::App("index.html?capture=1".into()),
+                            )
+                            .title("")
+                            .fullscreen(true)
+                            .transparent(true)
+                            .decorations(false)
+                            .always_on_top(true)
+                            .skip_taskbar(true)
+                            .visible(false)
+                            .build();
+                            match build {
+                                Ok(_) => daemon::log_message(
+                                    &app5,
+                                    &log2,
+                                    "Capture overlay: rebuilt — fresh webview self-loading",
+                                ),
+                                Err(e) => daemon::log_message(
+                                    &app5,
+                                    &log2,
+                                    &format!("Capture overlay: rebuild failed: {}", e),
+                                ),
+                            }
+                            gate2.store(false, std::sync::atomic::Ordering::SeqCst);
+                        });
+                    });
+                });
+            });
             return;
         }
         // First run (or the window died): build it now, hidden — the frontend
@@ -261,7 +331,10 @@ pub fn get_window_rects(state: tauri::State<'_, DaemonState>) -> Result<Vec<daem
 }
 
 #[tauri::command]
-pub fn get_captured_image(state: tauri::State<'_, DaemonState>) -> Result<String, String> {
+pub fn get_captured_image(app_handle: AppHandle, state: tauri::State<'_, DaemonState>) -> Result<String, String> {
+    // 6-U.9② instrumentation: this call only comes from the overlay webview —
+    // its presence in System Logs proves the webview JS is alive and invoking.
+    daemon::log_message(&app_handle, &state.log_history, "get_captured_image called (overlay webview alive)");
     let lock = state.captured_image.lock().map_err(|_| "Lock failed")?;
     if let Some(ref img) = *lock {
         // T6 (v0.4.4): the overlay DISPLAY layer ships as JPEG — a 4K PNG is

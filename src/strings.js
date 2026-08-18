@@ -46,6 +46,8 @@ export const ZH = {
   'Default (Temp Dir/img2cli)': '默认（临时目录/img2cli）',
   'Clean Expired Image Files (Days)': '清理过期图片（天）',
   'Save Settings': '保存设置',
+  'Config not loaded — saving disabled to protect existing settings':
+    '配置未加载成功 — 已禁用保存，防止默认值覆盖现有配置',
   // ── hosts tab ──
   'Configure remote SSH servers and local workspace directory routing.':
     '配置远程 SSH 服务器与本地目录的路由规则。',
