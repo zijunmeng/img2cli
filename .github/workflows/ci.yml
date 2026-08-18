@@ -64,3 +64,18 @@ jobs:
       - name: Cargo test (run unit tests)
         working-directory: src-tauri
         run: cargo test
+
+      # Dev-branch test builds: compile the portable Windows exe and upload it
+      # as a workflow artifact so same-day fixes can be field-tested WITHOUT
+      # burning a version tag (tags stay owned by release.yml). The raw Tauri
+      # exe runs green-portable (same as the release portable zip).
+      - name: Build portable test binary (Windows, dev only)
+        if: github.ref == 'refs/heads/dev' && matrix.platform == 'windows-latest'
+        run: npm run tauri build -- --no-bundle
+
+      - name: Upload test binary artifact (Windows, dev only)
+        if: github.ref == 'refs/heads/dev' && matrix.platform == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: img2cli-dev-windows-portable
+          path: src-tauri/target/release/img2cli.exe
