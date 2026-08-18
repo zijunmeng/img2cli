@@ -1,10 +1,11 @@
 {
   "$schema": "../gen/schemas/capabilities.json",
   "identifier": "default",
-  "description": "main window + capture overlay. The overlay webview MUST be listed: it subscribes to the warm-window 'capture-refresh' event, and core:event listen is ACL-gated per window label — an unlisted window's JS listeners are silently denied (root cause of the v0.4.4–v0.4.8 'dead overlay': the webview was never dead, it was deaf; app custom commands are ungated, which is why get_captured_image kept working)",
-  "windows": ["main", "capture"],
+  "description": "all img2cli-owned windows. capture: its webview subscribes to the warm-window 'capture-refresh' event, and core:event listen is ACL-gated per window label — an unlisted window's JS listeners are silently denied (root cause of the v0.4.4–v0.4.8 'dead overlay': the webview was never dead, it was deaf). pin-* (glob): U5 edge-resize needs core:window:allow-start-resize-dragging, which core:default does NOT include (its window set is read-only getters)",
+  "windows": ["main", "capture", "pin-*"],
   "permissions": [
     "core:default",
-    "dialog:default"
+    "dialog:default",
+    "core:window:allow-start-resize-dragging"
   ]
 }

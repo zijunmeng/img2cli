@@ -1,7 +1,8 @@
 <template>
   <!-- Region-capture overlay (screenshot hotkey opens index.html?capture=1) -->
-  <div v-if="captureMode" class="fixed inset-0 z-[9999] cursor-crosshair select-none"
-       @mousedown="capMouseDown" @mousemove="capMouseMove" @mouseup="capMouseUp"
+  <div v-if="captureMode" class="fixed inset-0 z-[9999] select-none"
+       :class="activeTool === 'eraser' ? 'cursor-none' : 'cursor-crosshair'"
+       @mousedown="capMouseDown" @mousemove="capMouseMove" @mouseup="capMouseUp" @mouseleave="eraserPos = null"
        @contextmenu.prevent="cancelRect">
     <img v-if="capturedImageSrc" :src="capturedImageSrc" class="absolute inset-0 w-full h-full object-cover pointer-events-none" />
     <!-- Annotation canvas (v0.4.2): full-overlay, pointer-transparent, clipped
@@ -21,8 +22,12 @@
     <div v-if="hoverRect && !hasRect" :style="hoverStyle" class="absolute pointer-events-none z-[10000]">
       <span class="absolute -top-6 left-0 bg-[#2997ff] text-white text-[11px] px-1.5 py-0.5 rounded-md font-mono whitespace-nowrap shadow-lg">{{ Math.round(hoverRect.w) }} × {{ Math.round(hoverRect.h) }}</span>
     </div>
+    <!-- U2: eraser ring cursor — the ring IS the erase radius (the native
+         cursor is hidden while the eraser tool is active). -->
+    <div v-if="activeTool === 'eraser' && eraserPos" class="absolute pointer-events-none z-[10002] rounded-full border-2 border-white/90 shadow-[0_0_0_1px_rgba(0,0,0,0.55)]"
+         :style="{ left: (eraserPos.x - toolSize) + 'px', top: (eraserPos.y - toolSize) + 'px', width: toolSize * 2 + 'px', height: toolSize * 2 + 'px' }"></div>
     <div v-if="hasRect" :style="[rectStyle, selBorderStyle]" @mousedown.stop="rectMouseDown"
-         :class="['absolute border-solid border-[#2997ff] box-border z-[10000]', activeTool === 'select' && confirmed ? 'cursor-move' : 'cursor-crosshair']">
+         :class="['absolute border-solid border-[#2997ff] box-border z-[10000]', activeTool === 'eraser' ? 'cursor-none' : activeTool === 'select' && confirmed ? 'cursor-move' : 'cursor-crosshair']">
       <div v-for="hd in handles" :key="hd" :style="handleStyle(hd)" :class="handleCursorClass(hd)"
            @mousedown.stop.prevent="startResize(hd, $event)"
            class="absolute w-2.5 h-2.5 bg-white border border-[#2997ff] rounded-sm shadow"></div>
@@ -46,14 +51,15 @@
           <button v-for="c in palette" :key="c" @click.stop="toolColor = c; colorMenu = false"
                   class="w-5 h-5 rounded-full border border-white/40 hover:scale-110 transition-transform" :style="{ backgroundColor: c }"></button>
         </div>
-        <div class="flex items-center gap-0.5 px-0.5" :title="t('Thickness')">
-          <button @click.stop="toolSize = Math.max(1, toolSize - 1)" class="w-5 h-7 rounded hover:bg-white/15 text-xs">−</button>
-          <span class="text-[11px] w-4 text-center tabular-nums">{{ toolSize }}</span>
-          <button @click.stop="toolSize = Math.min(8, toolSize + 1)" class="w-5 h-7 rounded hover:bg-white/15 text-xs">+</button>
+        <div class="flex items-center gap-0.5 px-0.5" :title="t('Thickness')"
+             :class="activeTool === 'select' && 'opacity-40 pointer-events-none'">
+          <button @click.stop="bumpSize(-1)" class="w-5 h-7 rounded hover:bg-white/15 text-xs">−</button>
+          <span class="text-[11px] w-5 text-center tabular-nums">{{ toolSize }}</span>
+          <button @click.stop="bumpSize(1)" class="w-5 h-7 rounded hover:bg-white/15 text-xs">+</button>
         </div>
         <span class="w-px h-4 bg-white/20 mx-0.5"></span>
         <button @click.stop="actionPin" :title="t('Pin to screen')" class="w-7 h-7 rounded-md hover:bg-white/15 text-sm flex items-center justify-center">📌</button>
-        <button @click.stop="actionSave" :title="t('Save to file')" class="w-7 h-7 rounded-md hover:bg-white/15 text-sm flex items-center justify-center">💾</button>
+        <button @click.stop="actionSave($event)" :title="t('Save to file (Shift = save as)')" class="w-7 h-7 rounded-md hover:bg-white/15 text-sm flex items-center justify-center">💾</button>
         <button @click.stop="actionCopy" :title="t('Copy image to clipboard') + ' (Ctrl+C)'" class="w-7 h-7 rounded-md hover:bg-white/15 text-sm flex items-center justify-center">📋</button>
         <button @click.stop="confirmSelection" :title="t('Confirm selection (then move/annotate)')"
                 :class="['px-2 h-7 rounded-md text-xs font-medium flex items-center', confirmed ? 'bg-white/20 text-white/60' : 'bg-white/15 hover:bg-white/25 text-white']">✓</button>
@@ -63,10 +69,10 @@
     </div>
   </div>
   <!-- Pin-to-screen window (index.html?pin=ID) -->
-  <div v-else-if="pinMode" class="fixed inset-0 overflow-hidden select-none bg-transparent"
-       @contextmenu.prevent="pinMenu = !pinMenu" @dblclick="closePin" @wheel.prevent="pinZoom" @mousedown="pinMenu = false">
-    <img v-if="pinImg" :src="pinImg" draggable="false"
-         class="w-full h-full object-fill cursor-move" @mousedown.stop="startPinDrag" />
+  <div v-else-if="pinMode" class="fixed inset-0 overflow-hidden select-none bg-transparent" :class="pinEdgeCursor"
+       @contextmenu.prevent="pinMenu = !pinMenu" @dblclick="pinDblClick" @wheel.prevent="pinZoom"
+       @mousemove="pinEdgeCheck" @mousedown="pinMouseDown">
+    <img v-if="pinImg" :src="pinImg" draggable="false" class="w-full h-full object-fill" />
     <div v-if="pinMenu" class="absolute top-1 left-1 z-50 bg-[#1a1a1a]/95 backdrop-blur rounded-lg py-1 text-xs text-white shadow-xl min-w-[140px]"
          @mousedown.stop @contextmenu.prevent>
       <button class="w-full text-left px-3 py-1.5 hover:bg-white/15" @click="pinCopy">📋 {{ t('Copy image to clipboard') }}</button>
@@ -567,9 +573,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, computed, watch } from 'vue';
+import { ref, reactive, onMounted, nextTick, computed, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
 import { ZH, THEME_ZH } from './strings.js';
 
@@ -1114,6 +1121,7 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const winRects = ref([]);
 const hoverRect = ref(null);
 const downHover = ref(null); // window under the cursor at mousedown (6-P)
+const prevSnap = ref(null); // U1: { rect, confirmed } to restore on a no-drag click
 const cursorCands = ref([]); // candidates containing the cursor, list order
 const candIdx = ref(0);
 const candidatesAt = (mx, my) =>
@@ -1181,7 +1189,21 @@ const annots = ref([]);
 const undoStack = ref([]);
 const redoStack = ref([]);
 const toolColor = ref('#ff4d4f');
-const toolSize = ref(3); // 1..8 — shared by line width / mosaic blocks / text size
+// U4: per-tool size memory — each tool keeps its own value in its own range
+// (marker draws at size×4, mosaic blocks at size×3, text font at 12+size×3,
+// eraser size = ring radius). The −/+ stepper edits the ACTIVE tool only.
+const TOOL_SIZE_RANGE = {
+  arrow: [1, 12], pen: [1, 20], marker: [1, 12], mosaic: [2, 20],
+  text: [2, 20], rect: [1, 12], ellipse: [1, 12], eraser: [4, 60], select: [3, 8],
+};
+const toolSizes = reactive({
+  arrow: 3, pen: 3, marker: 4, mosaic: 6, text: 4, rect: 3, ellipse: 3, eraser: 10, select: 3,
+});
+const toolSize = computed(() => toolSizes[activeTool.value] ?? 3);
+const bumpSize = (d) => {
+  const [lo, hi] = TOOL_SIZE_RANGE[activeTool.value] || [1, 8];
+  toolSizes[activeTool.value] = clamp(toolSize.value + d, lo, hi);
+};
 const activeAnnot = ref(null); // in-progress object while dragging
 const editingText = ref(null); // { x, y, value }
 const textEditor = ref(null);
@@ -1323,9 +1345,12 @@ const distToSeg = (px, py, x1, y1, x2, y2) => {
 // Eraser (T3): pen/marker strokes SPLIT at the erased span (Snipaste-style
 // partial erase — only the swept segment disappears); shape/text/mosaic
 // objects are removed whole. One undo snapshot per sweep.
-const ERASE_RADIUS = 10;
+// U2: the radius is the eraser tool's size (ring cursor shows the same value).
+const eraseRadius = computed(() => toolSizes.eraser);
+const eraserPos = ref(null); // ring-cursor position (U2)
 const eraseAt = (px, py) => {
   let mutated = false;
+  const R = eraseRadius.value;
   for (let i = annots.value.length - 1; i >= 0; i--) {
     const a = annots.value[i];
     if (a.type === 'pen' || a.type === 'marker') {
@@ -1334,7 +1359,7 @@ const eraseAt = (px, py) => {
       const runs = [];
       let cur = [];
       for (const p of a.pts) {
-        if (Math.hypot(p.x - px, p.y - py) <= ERASE_RADIUS) {
+        if (Math.hypot(p.x - px, p.y - py) <= R) {
           if (cur.length >= 2) runs.push(cur);
           cur = [];
         } else {
@@ -1429,17 +1454,35 @@ const annotMouseDown = (e) => {
     activeAnnot.value = { type: activeTool.value, sx: x, sy: y, x, y, w: 0, h: 0, ...common };
   }
 };
+// U3: Shift = the universal drawing constraint, snapped to 45° steps —
+// pen/marker draw a straight line from the anchor, arrows snap their angle,
+// rect-like tools become squares. Release Shift mid-drag to resume freehand.
+const shiftSnap = (ax, ay, x, y) => {
+  const dx = x - ax, dy = y - ay;
+  const ang = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
+  const len = Math.hypot(dx, dy);
+  return { x: ax + Math.cos(ang) * len, y: ay + Math.sin(ang) * len };
+};
 const annotMouseMove = (e) => {
   const a = activeAnnot.value;
   if (!a) return;
-  if (a.type === 'pen' || a.type === 'marker') a.pts.push({ x: e.clientX, y: e.clientY });
-  else if (a.type === 'arrow') { a.x2 = e.clientX; a.y2 = e.clientY; }
-  else {
+  if (a.type === 'pen' || a.type === 'marker') {
+    if (e.shiftKey) {
+      const p = shiftSnap(a.pts[0].x, a.pts[0].y, e.clientX, e.clientY);
+      a.pts = [{ ...a.pts[0] }, p];
+    } else {
+      a.pts.push({ x: e.clientX, y: e.clientY });
+    }
+  } else if (a.type === 'arrow') {
+    const p = e.shiftKey ? shiftSnap(a.x1, a.y1, e.clientX, e.clientY) : { x: e.clientX, y: e.clientY };
+    a.x2 = p.x; a.y2 = p.y;
+  } else {
     // Rect-like tools (rect/ellipse/mosaic): normalize live — negative
     // w/h fed into drawImage's source rect breaks the mosaic (and flips
     // shapes); drag from any corner must behave identically.
-    const x0 = Math.min(a.sx, e.clientX), x1 = Math.max(a.sx, e.clientX);
-    const y0 = Math.min(a.sy, e.clientY), y1 = Math.max(a.sy, e.clientY);
+    const p = e.shiftKey ? shiftSnap(a.sx, a.sy, e.clientX, e.clientY) : { x: e.clientX, y: e.clientY };
+    const x0 = Math.min(a.sx, p.x), x1 = Math.max(a.sx, p.x);
+    const y0 = Math.min(a.sy, p.y), y1 = Math.max(a.sy, p.y);
     a.x = x0; a.y = y0; a.w = x1 - x0; a.h = y1 - y0;
   }
   redrawAnnots();
@@ -1510,19 +1553,30 @@ const actionCopy = async () => {
   } catch (_) {}
   closeOverlay();
 };
-const actionSave = async () => {
+const actionSave = async (e) => {
+  // U6: works straight off an existing selection — no ✓ first. Plain click =
+  // T5 one-click save (Snipaste-style auto-named file into the default dir);
+  // Shift+click = native "save as" dialog.
+  if (!hasRect.value) return;
   try {
-    // T5 (v0.4.4): one-click save — Snipaste-style auto-named file
-    // (img2cli_YYYY-MM-DD_HH-mm-ss) straight into the default dir, no dialog.
-    const now = new Date();
-    const p2 = (n) => String(n).padStart(2, '0');
-    const stamp = `${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())}_${p2(now.getHours())}-${p2(now.getMinutes())}-${p2(now.getSeconds())}`;
-    const dir = config.value.save_dir && config.value.save_dir.trim()
-      ? config.value.save_dir.trim().replace(/[\\/]+$/, '')
-      : null;
-    // Bare filename → Rust resolves it into the default temp img2cli dir.
-    const path = dir ? `${dir}/img2cli_${stamp}.png` : `img2cli_${stamp}.png`;
-    await invoke('write_image', { path, dataUrl: annots.value.length ? compositeRegion() : plainRegionDataUrl() });
+    const dataUrl = annots.value.length ? compositeRegion() : plainRegionDataUrl();
+    if (e && e.shiftKey) {
+      const now = new Date();
+      const p2 = (n) => String(n).padStart(2, '0');
+      const name = `img2cli_${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())}_${p2(now.getHours())}-${p2(now.getMinutes())}-${p2(now.getSeconds())}.png`;
+      const path = await invoke('save_image_dialog', { defaultName: name });
+      if (path) await invoke('write_image', { path, dataUrl });
+    } else {
+      const now = new Date();
+      const p2 = (n) => String(n).padStart(2, '0');
+      const stamp = `${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())}_${p2(now.getHours())}-${p2(now.getMinutes())}-${p2(now.getSeconds())}`;
+      const dir = config.value.save_dir && config.value.save_dir.trim()
+        ? config.value.save_dir.trim().replace(/[\\/]+$/, '')
+        : null;
+      // Bare filename → Rust resolves it into the default temp img2cli dir.
+      const path = dir ? `${dir}/img2cli_${stamp}.png` : `img2cli_${stamp}.png`;
+      await invoke('write_image', { path, dataUrl });
+    }
   } catch (err) { console.error('save failed:', err); }
   closeOverlay();
 };
@@ -1553,6 +1607,7 @@ const loadCaptureImage = async () => {
     undoStack.value = [];
     redoStack.value = [];
     activeTool.value = 'select';
+    eraserPos.value = null;
     confirmed.value = false;
     rect.value = { x: 0, y: 0, w: 0, h: 0 };
     hoverRect.value = null;
@@ -1580,10 +1635,38 @@ const pinMode = ref(false);
 const pinImg = ref('');
 const pinIdNum = ref(0);
 const pinBase = ref({ w: 0, h: 0 });
-const pinScale = ref(1);
 const pinMenu = ref(false);
 const closePin = () => { try { invoke('close_pin', { id: pinIdNum.value }); } catch (_) {} };
 const startPinDrag = () => { try { invoke('drag_pin', { id: pinIdNum.value }); } catch (_) {} };
+// U5: right-right-click also fires dblclick in Chromium — only a LEFT
+// double-click closes the pin (right-click is the menu).
+const pinDblClick = (e) => { if (e.button === 0) closePin(); };
+// U5: edge hot zones — the undecorated window has no native resize borders,
+// so the page tracks the edge under the cursor (6px band) and hands mousedown
+// off to the OS resize loop via the window plugin (pin-* is in the capability
+// list; core:window:allow-start-resize-dragging grants the call).
+const pinEdge = ref('');
+const PIN_EDGE_DIR = { n: 'North', ne: 'NorthEast', e: 'East', se: 'SouthEast', s: 'South', sw: 'SouthWest', w: 'West', nw: 'NorthWest' };
+const pinEdgeCheck = (e) => {
+  const w = window.innerWidth, h = window.innerHeight;
+  const l = e.clientX <= 6, r = e.clientX >= w - 6, t = e.clientY <= 6, b = e.clientY >= h - 6;
+  pinEdge.value =
+    (t && l) ? 'nw' : (t && r) ? 'ne' : (b && l) ? 'sw' : (b && r) ? 'se'
+    : t ? 'n' : b ? 's' : l ? 'w' : r ? 'e' : '';
+};
+const pinEdgeCursor = computed(() => ({
+  n: 'cursor-ns-resize', s: 'cursor-ns-resize', e: 'cursor-ew-resize', w: 'cursor-ew-resize',
+  ne: 'cursor-nesw-resize', sw: 'cursor-nesw-resize', nw: 'cursor-nwse-resize', se: 'cursor-nwse-resize',
+}[pinEdge.value] || 'cursor-move'));
+const pinMouseDown = (e) => {
+  if (e.button !== 0) return; // right = menu (contextmenu handler), never drag
+  pinMenu.value = false;
+  if (pinEdge.value) {
+    getCurrentWindow().startResizeDragging(PIN_EDGE_DIR[pinEdge.value]).catch((err) => console.error('resize drag failed:', err));
+    return;
+  }
+  startPinDrag();
+};
 const pinCopy = async () => {
   pinMenu.value = false;
   try { await invoke('copy_image', { dataUrl: pinImg.value }); } catch (e) { console.error(e); }
@@ -1598,10 +1681,13 @@ const pinSaveAs = async () => {
     if (path) await invoke('write_image', { path, dataUrl: pinImg.value });
   } catch (e) { console.error(e); }
 };
+// U5: uniform wheel zoom derived from the ACTUAL window size (not a tracked
+// scale) so edge-resize (which stretches freely) and zoom compose without drift.
 const pinZoom = (e) => {
-  pinScale.value = Math.min(5, Math.max(0.2, pinScale.value * (e.deltaY < 0 ? 1.1 : 0.9)));
+  const cur = pinBase.value.w > 0 ? window.innerWidth / pinBase.value.w : 1;
+  const target = Math.min(5, Math.max(0.2, cur * (e.deltaY < 0 ? 1.1 : 0.9)));
   try {
-    invoke('resize_pin', { id: pinIdNum.value, w: Math.max(80, pinBase.value.w * pinScale.value), h: Math.max(80, pinBase.value.h * pinScale.value) });
+    invoke('resize_pin', { id: pinIdNum.value, w: Math.max(80, pinBase.value.w * target), h: Math.max(80, pinBase.value.h * target) });
   } catch (_) {}
 };
 
@@ -1611,6 +1697,7 @@ const hintLines = computed(() => [
   t('Tab / Shift+Tab cycle elements'),
   t('Shift+R last region · `,` `.` history'),
   t('WASD move cursor 1px'),
+  t('Shift while drawing = straight / square'),
   t('Enter save · Esc cancel'),
 ]);
 
@@ -1625,13 +1712,19 @@ const selBorderStyle = computed(() => ({
 const capMouseDown = (e) => {
   // 6-P: a press ALWAYS starts a draw — snap arbitration happens on mouseup,
   // so a drag begun inside a detected window still draws a custom selection.
-  downHover.value = hoverRect.value;
   startDraw(e);
 };
 // Drawing is always available — anywhere, including INSIDE an existing
 // selection (user request 2026-08-16): a plain mousedown restarts the
 // selection; Alt+drag inside keeps the move affordance for adjusting.
 const startDraw = (e) => {
+  // U1: remember the candidate under the cursor AND the current selection —
+  // hover highlighting is suppressed while a selection exists, so the old
+  // code lost BOTH on a no-drag click and the selection collapsed to 0×0.
+  // Captured HERE because presses inside an existing selection arrive via
+  // rectMouseDown (child .stop), bypassing capMouseDown.
+  downHover.value = cursorCands.value.length ? cursorCands.value[candIdx.value] : null;
+  prevSnap.value = hasRect.value ? { rect: { ...rect.value }, confirmed: confirmed.value } : null;
   capAction.value = 'draw';
   confirmed.value = false; // a fresh draw returns to the unconfirmed state
   rect.value = { x: e.clientX, y: e.clientY, w: 0, h: 0 };
@@ -1660,6 +1753,8 @@ const startResize = (hd, e) => {
   capOrigin.value = { mx: e.clientX, my: e.clientY, rect: { ...rect.value } };
 };
 const capMouseMove = (e) => {
+  // U2: the eraser ring tracks the pointer in every mode (idle + sweeping).
+  if (activeTool.value === 'eraser') eraserPos.value = { x: e.clientX, y: e.clientY };
   if (!capAction.value) {
     // Candidates are maintained regardless of an existing selection (Tab
     // switches the selection); the passive hover OUTLINE only shows when
@@ -1708,13 +1803,22 @@ const capMouseUp = () => {
   // 6-P/6-R: a sub-threshold press-release (jitter-safe 8px) over a detected
   // window snaps that window; any real drag keeps the drawn selection. The
   // snapped selection is unconfirmed (T1) — ✓ is the only confirmation.
-  if (rect.value.w < 8 && rect.value.h < 8 && downHover.value) {
-    const r = downHover.value;
-    rect.value = { x: r.x, y: r.y, w: r.w, h: r.h };
-    confirmed.value = false;
-    hoverRect.value = null;
+  if (rect.value.w < 8 && rect.value.h < 8) {
+    if (downHover.value) {
+      const r = downHover.value;
+      rect.value = { x: r.x, y: r.y, w: r.w, h: r.h };
+      confirmed.value = false;
+      hoverRect.value = null;
+    } else if (prevSnap.value) {
+      // U1 (Snipaste parity): a click that starts no new selection KEEPS the
+      // previous one (state included) instead of collapsing it to 0×0 — Tab
+      // into a window then click inside no longer destroys the selection.
+      rect.value = { ...prevSnap.value.rect };
+      confirmed.value = prevSnap.value.confirmed;
+    }
   }
   downHover.value = null;
+  prevSnap.value = null;
 };
 
 const confirmRect = async () => {

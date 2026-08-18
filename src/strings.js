@@ -166,6 +166,8 @@ export const ZH = {
   Thickness: '粗细',
   'Pin to screen': '贴到屏幕',
   'Save to file': '保存到文件',
+  'Save to file (Shift = save as)': '保存到文件（Shift = 另存为）',
+  'Shift while drawing = straight / square': '绘制时 Shift = 直线 / 正方形',
   'Copy image to clipboard': '复制图片到剪贴板',
   'Upload + inject': '上传并注入路径',
   // ── v0.3.14 ──
