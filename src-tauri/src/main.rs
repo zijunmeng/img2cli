@@ -832,12 +832,15 @@ fn main() {
                 );
             }
             
-            // T6: keep the capture overlay warm (hidden) so the screenshot
-            // hotkey skips window/webview cold start entirely. Runs BEFORE
-            // app.manage() moves daemon_state into the app state container.
-            capture::prewarm_capture_overlay(app.handle(), &daemon_state);
-
             app.manage(daemon_state);
+
+            // T6: keep the capture overlay warm (hidden) so the screenshot
+            // hotkey skips window/webview cold start entirely. MUST run AFTER
+            // app.manage(): building a webview window before the state is
+            // managed lets window JS win the race against setup and commands
+            // fail with "state not managed" (v0.4.5 regression, fixed 0.4.6).
+            let managed_state = app.state::<daemon::DaemonState>();
+            capture::prewarm_capture_overlay(app.handle(), &managed_state);
             
             // Build the system tray and context menu
             let show_i = MenuItem::with_id(app, "show", "Show Settings", true, None::<&str>)?;
