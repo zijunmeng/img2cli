@@ -308,9 +308,20 @@ pub fn get_captured_image(app_handle: AppHandle, state: tauri::State<'_, DaemonS
         use image::ExtendedColorType;
         #[allow(unused_imports)]
         use image::ImageEncoder as _;
+        // 6-U.9② final act: JPEG has NO alpha channel — feeding Rgba8 made the
+        // encoder error out on EVERY call. This path was dead code since v0.4.4
+        // (the ACL-deaf warm window never reached it), so it ran for the first
+        // time in the field on 2026-08-18 and failed immediately. Screenshots
+        // are fully opaque — strip alpha (lossless for display) into a tightly
+        // packed RGB buffer, no intermediate image copy.
+        let raw = img.as_raw();
+        let mut rgb = Vec::with_capacity(raw.len() / 4 * 3);
+        for px in raw.chunks_exact(4) {
+            rgb.extend_from_slice(&px[..3]);
+        }
         let mut bytes = Vec::new();
         let mut enc = JpegEncoder::new_with_quality(&mut bytes, 85);
-        enc.encode(img.as_raw(), img.width(), img.height(), ExtendedColorType::Rgba8)
+        enc.encode(&rgb, img.width(), img.height(), ExtendedColorType::Rgb8)
             .map_err(|e| format!("JPEG encode failed: {}", e))?;
         let b64 = base64_encode(&bytes);
         // 6-U.9② stage 2: no "returned" line after a "called" line = the hang
