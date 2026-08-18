@@ -1596,9 +1596,14 @@ const plainRegionDataUrl = () => compositeRegion();
 // Load the frozen frame + per-session state; reveal the overlay only after
 // the frame renders (flash-free). Called at mount AND on every capture-refresh
 // (T6 persistent window).
+// 6-U.9② stage 2: every await is followed by a breadcrumb — a hang shows up
+// in daemon.log as the LAST breadcrumb before the silence, naming the stuck
+// hop exactly (invoke return, config, rects, or show).
+const feLog = (m) => { invoke('frontend_log', { msg: m }).catch(() => {}); };
 const loadCaptureImage = async () => {
   try {
     const src = await invoke('get_captured_image');
+    feLog(`frame received (${src.length} chars)`);
     capturedImageSrc.value = src;
     // The annotation engine needs the frozen frame as a drawable Image
     // (mosaic sampling + compositing). Fresh session state each time.
@@ -1621,11 +1626,17 @@ const loadCaptureImage = async () => {
         if (cfg[k] !== undefined) config.value[k] = cfg[k];
       });
       captureHistory.value = cfg.capture_history || [];
-      if (cfg.capture_auto_detect) winRects.value = await invoke('get_window_rects');
-    } catch (_) {}
+      feLog('config ok');
+      if (cfg.capture_auto_detect) {
+        winRects.value = await invoke('get_window_rects');
+        feLog(`rects ok (${winRects.value.length})`);
+      }
+    } catch (e) { feLog(`cfg/rects failed: ${e}`); }
     await nextTick();
-    try { await invoke('show_capture_overlay'); } catch (_) {}
+    feLog('requesting show');
+    try { await invoke('show_capture_overlay'); feLog('show invoked'); } catch (e) { feLog(`show failed: ${e}`); }
   } catch (e) {
+    feLog(`loadCaptureImage FAILED: ${e}`);
     console.error('Failed to load captured image:', e);
   }
 };

@@ -283,11 +283,20 @@ pub fn get_window_rects(state: tauri::State<'_, DaemonState>) -> Result<Vec<daem
     Ok(state.window_rects.lock().map_err(|_| "Lock failed")?.clone())
 }
 
+/// Frontend breadcrumb (6-U.9② stage 2): the overlay's loadCaptureImage chain
+/// has several awaits between "event received" and "show" — the frontend
+/// reports each hop so a hang names its exact await in the daemon log.
+#[tauri::command]
+pub fn frontend_log(app_handle: AppHandle, state: tauri::State<'_, DaemonState>, msg: String) {
+    daemon::log_message(&app_handle, &state.log_history, &format!("[frontend] {}", msg));
+}
+
 #[tauri::command]
 pub fn get_captured_image(app_handle: AppHandle, state: tauri::State<'_, DaemonState>) -> Result<String, String> {
     // 6-U.9② instrumentation: this call only comes from the overlay webview —
     // its presence in System Logs proves the webview JS is alive and invoking.
     daemon::log_message(&app_handle, &state.log_history, "get_captured_image called (overlay webview alive)");
+    let started = std::time::Instant::now();
     let lock = state.captured_image.lock().map_err(|_| "Lock failed")?;
     if let Some(ref img) = *lock {
         // T6 (v0.4.4): the overlay DISPLAY layer ships as JPEG — a 4K PNG is
@@ -304,8 +313,21 @@ pub fn get_captured_image(app_handle: AppHandle, state: tauri::State<'_, DaemonS
         enc.encode(img.as_raw(), img.width(), img.height(), ExtendedColorType::Rgba8)
             .map_err(|e| format!("JPEG encode failed: {}", e))?;
         let b64 = base64_encode(&bytes);
+        // 6-U.9② stage 2: no "returned" line after a "called" line = the hang
+        // is inside this command (lock/encode) or the IPC return itself.
+        daemon::log_message(
+            &app_handle,
+            &state.log_history,
+            &format!(
+                "get_captured_image returned {} bytes (jpeg {} raw, {}ms)",
+                b64.len(),
+                bytes.len(),
+                started.elapsed().as_millis()
+            ),
+        );
         return Ok(format!("data:image/jpeg;base64,{}", b64));
     }
+    daemon::log_message(&app_handle, &state.log_history, "get_captured_image: none in memory (startup prewarm)");
     Err("No captured screenshot in memory".to_string())
 }
 
