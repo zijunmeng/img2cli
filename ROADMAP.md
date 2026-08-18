@@ -6,7 +6,7 @@ This file tracks future architecture improvements, user experience features, and
 
 ## 0. Road to v1.0.0 (decided 2026-08-16)
 
-**Goal: at v1.0.0, ship a feature-complete / highly stable / performant / lightweight product. ALL remaining debt is cleared before v0.4.5 (nothing slips to v0.5.x).**
+**Goal: at v1.0.0, ship a feature-complete / highly stable / performant / lightweight product. (排期规则 2026-08-18 更新: 大件可分批进 0.5.x — v1.0.0 是唯一硬终点; 此前 "v0.4.5 前全部清债" 的中间闸已多次顺延并正式废止, v0.4.9 不再是塞下一切的最后一格.)**
 
 | Version | Theme | Contents |
 |---|---|---|
@@ -18,7 +18,9 @@ This file tracks future architecture improvements, user experience features, and
 | v0.4.6 | 回归修复 (2026-08-18) | v0.4.5 `state not managed` 启动回归 (prewarm 挪到 manage 前引发的竞态, `a404b99`); 打点落地后**现场定位死因**: 热键链 4 行中前 3 行每按必出、第 4 行 `Capture overlay shown` 从不出现 → 断点 = 常驻浮层 webview 收到 capture-refresh 后未完成 渲染→show (6-U.9②) |
 | v0.4.7 | **浮层修复批** (2026-08-18, 用户被挡无法测试 → 插队) | 6-U.9② **死浮层看门狗**: emit 后 400ms 仍隐藏 → 自动重建浮层窗 (新 webview 自加载自 show, 重建闸门防连点堆积) · `get_captured_image` 存活打点 (区分 webview 死 vs invoke 挂) · 6-U.10② **录入器 keyup 兜底** (IME 吞字母 keydown 时, 幸存的 keyUP 补齐组合) · 6-U.10③ **配置未加载禁存** (configLoaded 闸 + Save 禁用, 杜绝默认值覆盖 config.toml) |
 | v0.4.8 | **卡死修复** (2026-08-18, `824c367`) | 6-U.11: v0.4.7 看门狗在主线程叠建 webview → 用户机整机卡死 → **看门狗移除, 改按键节奏恢复** (emits/shows 计数判死, 下一次按键至多重建一次) · **daemon.log 文件镜像** (`%TEMP%/img2cli/daemon.log`, 冻死也能取证) |
-| v0.4.9 | **最后一格, 全部清债** (⚠️ 最后一个 0.4.x 槽位 — 十进制规则下 0.4.9 之后即 0.5.0, 大批次必须全部装进此版, 排期压力大) | **多显示器** (per-monitor freeze + 坐标映射, 现只 `monitors.first()`) · **SSH 保活池** (<200ms uploads, M1-B) · **原生预冻结** (M1-A; 6-U.7) · **OCR→markdown 代码块** (Windows OCR Runtime first) · **长截屏 scrolling capture** (select region → loop {PostMessage WM_MOUSEWHEEL to target, Chromium needs SendInput fallback} → frame capture → row-overlap stitching → long image into the existing annotate/pin/upload pipeline; ShareX's implementation in `ref/pkg/ShareX-develop` is the reference) · L-tail (cursor capture / focus-loss exit / sound) · **6-U: v0.4.4 用户反馈批** (U1–U7) · ~~热窗 webview 死亡根因~~ (**已破案 2026-08-18 21时**: ACL — capture 窗口从不在 capability 里, `listen('capture-refresh')` 被静默拒, 热窗刷新链路从未生效过, webview 是聋不是死; 修复 = `windows:["main","capture"]` 一行, 已推 dev 走 CI 测试包装机验证, 随本版发 tag) |
+| v0.4.9 | **修复 + 手感批** (2026-08-18 重排: 排期解压后本版回归"能用好用的产品", 不再是大杂烩) | **ACL 根因修复** (`9e5e41e` 已在 dev: capabilities +`"capture"` — 浮层热窗刷新链路自 v0.4.4 以来首次真正生效, U7 可感知延迟预期随之大解) · **6-U.4 手感批**: U1 Tab 切换候选后仍可自由拖拽选区 · U2 橡皮擦圆圈光标 (半径可见, 接入工具栏 −/+) · U3 画笔/马克笔 Shift=直线 · U4 线宽档位扩大 (按工具独立记忆) · U5 贴图窗边缘 resize (WM_NCHITTEST 热点) + 右键菜单修复 · U6 保存免确认直达 (⚠️ 待决策: 💾一键落盘 / 恢复另存为 / 可配置) |
+| v0.5.0 | **大件第一筐 — 基础设施 / perf** | **多显示器** (per-monitor freeze + 坐标映射, 现只 `monitors.first()`) · **SSH 保活池** (<200ms uploads, M1-B) · **原生预冻结** (M1-A; 先 show 再贴图, 秒出根治; 6-U.7) |
+| v0.5.1–0.5.x | **功能大件, 每版一个主题** (不预排死, 按届时优先级定序) | **OCR→markdown 代码块** (Windows OCR Runtime first) · **长截屏 scrolling capture** (select region → loop {PostMessage WM_MOUSEWHEEL to target, Chromium needs SendInput fallback} → frame capture → row-overlap stitching → long image into the existing annotate/pin/upload pipeline; ShareX's implementation in `ref/pkg/ShareX-develop` is the reference) · L-tail (cursor capture / focus-loss exit / sound) |
 | v1.0.0 | Ship | code signing (⚠️ requires purchasing a certificate — user decision), final polish, docs |
 
 Open decisions: signing certificate budget (v1.0.0 stage); OCR scope = Windows OCR Runtime first, macOS Vision post-1.0 (assumed OK).
